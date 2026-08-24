@@ -5,6 +5,7 @@
 
 #include "qt/MainWindow.h"
 
+#include "core/BeShareProtocol.h"
 #include "core/ChatCommandParser.h"
 #include "core/HiTuxShareVersion.h"
 #include "qt/ChatInputLine.h"
@@ -640,7 +641,8 @@ MainWindow::_SendChatToEveryone(const QString& text, bool isAction)
 	// An action goes out with its "/me " prefix intact -- that prefix is the wire
 	// format -- but it must not be shown twice locally.
 	localEcho.text = isAction
-		? ToMuscleString(text.mid(4)) : ToMuscleString(text);
+		? ToMuscleString(text.mid((int) strlen(BESHARE_ACTION_PREFIX)))
+		: ToMuscleString(text);
 
 	fChatLogView->AppendChatMessage(localEcho);
 }

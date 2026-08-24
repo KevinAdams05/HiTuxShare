@@ -1,0 +1,13 @@
+HiTuxShare probe v0.1.0 -- connecting to 127.0.0.1:12962 as "bob"
+Type /help for commands, /quit to exit.
+*** Connecting...
+*** Connecting to 127.0.0.1...
+*** Connected.
+*** Connected to 127.0.0.1:12962.
+*** We are session 0 on fe80::ccb5:fcae:1d2f:a093@2.
+*** (1) alice joined [HiTuxShare v0.1.0]
+[DEBUG] removed path=[/fe80::ccb5:fcae:1d2f:a093@2/1/beshare/name] depth=4
+[DEBUG] removed path=[/fe80::ccb5:fcae:1d2f:a093@2/1/beshare/userstatus] depth=4
+*** Disconnected from server.
+*** Disconnected.
+*** Goodbye.

@@ -33,12 +33,10 @@ class ProbeListener : public ServerConnectionListener
 public:
 	ProbeListener()
 		:
-		fConnection(NULL),
 		fShouldQuit(false)
 	{
 	}
 
-	void SetConnection(ServerConnection* connection) { fConnection = connection; }
 	bool ShouldQuit() const { return fShouldQuit; }
 	void RequestQuit() { fShouldQuit = true; }
 
@@ -112,7 +110,6 @@ public:
 	}
 
 private:
-	ServerConnection* fConnection;
 	bool fShouldQuit;
 };
 
@@ -311,7 +308,6 @@ main(int argc, char** argv)
 	connection.SetInstallId(settings.GetInstallId());
 	connection.SetLocalUserName(userName);
 	connection.SetLocalUserStatus(settings.GetUserStatus());
-	listener.SetConnection(&connection);
 
 	if (connection.ConnectToServer(serverAddress, serverPort).IsError()) {
 		printf("*** Could not start the connection.\n");

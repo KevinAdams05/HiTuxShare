@@ -1,7 +1,7 @@
 # HiTuxShare — porting HiShare from Haiku to Linux
 
-**Status:** planning only, no code written
-**Date:** 2026-08-24
+**Status:** Phase 0 and Phase 1 implemented and verified — see [README](README.md) for what works
+**Date:** 2026-08-24 (plan), Phase 1 landed the same day
 **Upstream:** [atomozero/HiShare](https://github.com/atomozero/HiShare) 1.2 (Haiku) · [jfriesne/muscle](https://github.com/jfriesne/muscle) 9.92
 **Goal:** a light, fast, small native Linux client that is wire-compatible with BeShare 3.04 / HiShare 1.2
 
@@ -512,6 +512,30 @@ app icon, packaging (`.deb` first, then Flatpak), and multi-server.
    degradation (fall back to periodic rescan) rather than silent failure.
 6. **Two firewalled peers can never transfer to each other.** Protocol limitation, present since
    BeShare. Not fixable; just needs a clear message in the UI.
+
+### What implementation confirmed or corrected
+
+Recorded here because the plan's predictions are only worth anything if the misses
+are written down next to them.
+
+- **The MUSCLE-does-the-hard-part bet paid off.** MUSCLE 9.92 built unmodified,
+  `tools/chatclient.cpp` was a usable Phase 0 skeleton, and the Qt callback mechanism
+  worked as advertised. Phase 1 needed no protocol code beyond reading and writing
+  fields.
+- **The `status_t` / `Find*` API churn was a non-issue** for new code — it only bites
+  when lifting HiShare's existing files, which Phase 2 will do.
+- **Two bugs were found only by running against a real server**, which is the whole
+  argument for Phase 0 existing:
+  - `muscled` reports a departing user as one removal per matched leaf node
+    (`/host/1/beshare/name`, depth 4), *not* as a single removal at session depth.
+    Both HiShare and this plan assumed session depth. Users would have accumulated
+    in the list forever.
+  - `FileDataIO(path, mode)` defers its `fopen()`, so the obvious "did it open?"
+    check is always false. Settings silently never persisted.
+- **The GUI needed no `ICallbackMechanism` work at all**, as predicted — but note the
+  corollary: choosing GTK or FLTK later means writing and debugging that ~30-line
+  bridge, and it is the piece most likely to produce rare, hard-to-reproduce
+  cross-thread bugs.
 
 **Open questions for you**
 

@@ -452,8 +452,6 @@ ServerConnection::_HandleNodeUpdated(const String& nodePath, const MessageRef& n
 
 	if (didChange || isNewUser)
 		_NotifyUserUpdated(sessionId, isNewUser);
-	else if (isNewUser == false && user->userName.IsEmpty())
-		return;
 }
 
 
