@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="800" viewBox="0 0 1040 800" font-family="DejaVu Sans, Helvetica, Arial, sans-serif">
+  <rect width="1040" height="800" fill="#ffffff"/>
+  <defs>
+    <marker id="s1" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L8,3 z" fill="#9aa0a6"/>
+    </marker>
+  </defs>
+
+  <text x="520" y="32" text-anchor="middle" font-size="21" font-weight="bold" fill="#1a1a1a">Haiku → Linux porting seams</text>
+  <text x="520" y="53" text-anchor="middle" font-size="13" fill="#5f6368">Every BeAPI dependency in HiShare, and what replaces it. Green = drop-in · amber = real work · red = feature loss</text>
+
+  <rect x="40" y="72" width="400" height="30" rx="5" fill="#fce8e6" stroke="#d93025" stroke-width="1.5"/>
+  <text x="240" y="92" text-anchor="middle" font-size="13" font-weight="bold" fill="#a50e0e">Haiku / BeAPI  (what HiShare uses today)</text>
+  <rect x="600" y="72" width="400" height="30" rx="5" fill="#e6f4ea" stroke="#188038" stroke-width="1.5"/>
+  <text x="800" y="92" text-anchor="middle" font-size="13" font-weight="bold" fill="#0d652d">Linux replacement</text>
+
+  <!-- rows -->
+  <g font-size="11.5">
+    <!-- 1 -->
+    <rect x="40" y="116" width="400" height="40" rx="4" fill="#fef7f6" stroke="#e8a9a3" stroke-width="1"/>
+    <text x="52" y="133" fill="#1a1a1a" font-weight="bold">BMessageTransceiverThread (besupport/)</text>
+    <text x="52" y="149" fill="#5f6368">delivers muscle Messages as BMessages to a BHandler</text>
+    <rect x="600" y="116" width="400" height="40" rx="4" fill="#f2faf4" stroke="#9ccfab" stroke-width="1"/>
+    <text x="612" y="133" fill="#1a1a1a" font-weight="bold">CallbackMessageTransceiverThread</text>
+    <text x="612" y="149" fill="#5f6368">+ ICallbackMechanism · Qt version ships upstream</text>
+    <line x1="444" y1="136" x2="596" y2="136" stroke="#9aa0a6" stroke-width="1.5" marker-end="url(#s1)"/>
+    <circle cx="520" cy="136" r="9" fill="#fef7e0" stroke="#f9ab00" stroke-width="1.5"/>
+    <text x="520" y="140" text-anchor="middle" font-size="10" font-weight="bold" fill="#b06000">!</text>
+
+    <!-- 2 -->
+    <rect x="40" y="164" width="400" height="40" rx="4" fill="#fef7f6" stroke="#e8a9a3" stroke-width="1"/>
+    <text x="52" y="181" fill="#1a1a1a" font-weight="bold">AcceptSocketsThread</text>
+    <text x="52" y="197" fill="#5f6368">listens for inbound peer transfers — REMOVED in MUSCLE 8.40</text>
+    <rect x="600" y="164" width="400" height="40" rx="4" fill="#f2faf4" stroke="#9ccfab" stroke-width="1"/>
+    <text x="612" y="181" fill="#1a1a1a" font-weight="bold">MessageTransceiverThread::PutAcceptFactory()</text>
+    <text x="612" y="197" fill="#5f6368">same job, different shape — rewrite the accept path</text>
+    <line x1="444" y1="184" x2="596" y2="184" stroke="#9aa0a6" stroke-width="1.5" marker-end="url(#s1)"/>
+    <circle cx="520" cy="184" r="9" fill="#fef7e0" stroke="#f9ab00" stroke-width="1.5"/>
+    <text x="520" y="188" text-anchor="middle" font-size="10" font-weight="bold" fill="#b06000">!</text>
+
+    <!-- 3 -->
+    <rect x="40" y="212" width="400" height="40" rx="4" fill="#fef7f6" stroke="#e8a9a3" stroke-width="1"/>
+    <text x="52" y="229" fill="#1a1a1a" font-weight="bold">node_monitor + BDirectory tree watch</text>
+    <text x="52" y="245" fill="#5f6368">live "someone dropped a file in my share" notices</text>
+    <rect x="600" y="212" width="400" height="40" rx="4" fill="#f2faf4" stroke="#9ccfab" stroke-width="1"/>
+    <text x="612" y="229" fill="#1a1a1a" font-weight="bold">inotify (recursive, one watch per dir)</text>
+    <text x="612" y="245" fill="#5f6368">watch-limit + rename semantics need care</text>
+    <line x1="444" y1="232" x2="596" y2="232" stroke="#9aa0a6" stroke-width="1.5" marker-end="url(#s1)"/>
+    <circle cx="520" cy="232" r="9" fill="#fef7e0" stroke="#f9ab00" stroke-width="1.5"/>
+    <text x="520" y="236" text-anchor="middle" font-size="10" font-weight="bold" fill="#b06000">!</text>
+
+    <!-- 4 -->
+    <rect x="40" y="260" width="400" height="40" rx="4" fill="#fef7f6" stroke="#e8a9a3" stroke-width="1"/>
+    <text x="52" y="277" fill="#1a1a1a" font-weight="bold">BFS attributes (ReadAttr / GetAttrInfo / BMimeType)</text>
+    <text x="52" y="293" fill="#5f6368">rich per-file columns: Audio:Bitrate, MAIL:subject, …</text>
+    <rect x="600" y="260" width="400" height="40" rx="4" fill="#fdf1f0" stroke="#e8a9a3" stroke-width="1"/>
+    <text x="612" y="277" fill="#1a1a1a" font-weight="bold">DISPLAY received attrs; publish only the basics</text>
+    <text x="612" y="293" fill="#5f6368">Linux xattrs are ~4 KB and unpopulated — asymmetric</text>
+    <line x1="444" y1="280" x2="596" y2="280" stroke="#9aa0a6" stroke-width="1.5" marker-end="url(#s1)"/>
+    <circle cx="520" cy="280" r="9" fill="#fce8e6" stroke="#d93025" stroke-width="1.5"/>
+    <text x="520" y="284" text-anchor="middle" font-size="10" font-weight="bold" fill="#a50e0e">×</text>
+
+    <!-- 5 -->
+    <rect x="40" y="308" width="400" height="40" rx="4" fill="#fef7f6" stroke="#e8a9a3" stroke-width="1"/>
+    <text x="52" y="325" fill="#1a1a1a" font-weight="bold">BEOS:ICON / HVIF vector icons on shared files</text>
+    <text x="52" y="341" fill="#5f6368">"besharez:Vector Icon" field in the file-info Message</text>
+    <rect x="600" y="308" width="400" height="40" rx="4" fill="#fdf1f0" stroke="#e8a9a3" stroke-width="1"/>
+    <text x="612" y="325" fill="#1a1a1a" font-weight="bold">Ignore on receive; never publish</text>
+    <text x="612" y="341" fill="#5f6368">use the XDG icon theme instead. Optional HVIF decode later</text>
+    <line x1="444" y1="328" x2="596" y2="328" stroke="#9aa0a6" stroke-width="1.5" marker-end="url(#s1)"/>
+    <circle cx="520" cy="328" r="9" fill="#fce8e6" stroke="#d93025" stroke-width="1.5"/>
+    <text x="520" y="332" text-anchor="middle" font-size="10" font-weight="bold" fill="#a50e0e">×</text>
+
+    <!-- 6 -->
+    <rect x="40" y="356" width="400" height="40" rx="4" fill="#fef7f6" stroke="#e8a9a3" stroke-width="1"/>
+    <text x="52" y="373" fill="#1a1a1a" font-weight="bold">Santa's ColumnListView + SplitPane (2 900 lines vendored)</text>
+    <text x="52" y="389" fill="#5f6368">sortable multi-column lists with icons</text>
+    <rect x="600" y="356" width="400" height="40" rx="4" fill="#f2faf4" stroke="#9ccfab" stroke-width="1"/>
+    <text x="612" y="373" fill="#1a1a1a" font-weight="bold">QTreeView + QSortFilterProxyModel + QSplitter</text>
+    <text x="612" y="389" fill="#5f6368">deleted, not ported — also sheds a restrictive licence</text>
+    <line x1="444" y1="376" x2="596" y2="376" stroke="#9aa0a6" stroke-width="1.5" marker-end="url(#s1)"/>
+    <circle cx="520" cy="376" r="9" fill="#e6f4ea" stroke="#188038" stroke-width="1.5"/>
+    <text x="520" y="380" text-anchor="middle" font-size="10" font-weight="bold" fill="#0d652d">✓</text>
+
+    <!-- 7 -->
+    <rect x="40" y="404" width="400" height="40" rx="4" fill="#fef7f6" stroke="#e8a9a3" stroke-width="1"/>
+    <text x="52" y="421" fill="#1a1a1a" font-weight="bold">Locale Kit catkeys (~20 languages, already translated)</text>
+    <text x="52" y="437" fill="#5f6368">ShareStrings.cpp — 6 978 lines of string tables</text>
+    <rect x="600" y="404" width="400" height="40" rx="4" fill="#f2faf4" stroke="#9ccfab" stroke-width="1"/>
+    <text x="612" y="421" fill="#1a1a1a" font-weight="bold">gettext .po  (convert the .catkeys mechanically)</text>
+    <text x="612" y="437" fill="#5f6368">the existing translations carry over — write a converter</text>
+    <line x1="444" y1="424" x2="596" y2="424" stroke="#9aa0a6" stroke-width="1.5" marker-end="url(#s1)"/>
+    <circle cx="520" cy="424" r="9" fill="#e6f4ea" stroke="#188038" stroke-width="1.5"/>
+    <text x="520" y="428" text-anchor="middle" font-size="10" font-weight="bold" fill="#0d652d">✓</text>
+
+    <!-- 8 -->
+    <rect x="40" y="452" width="400" height="40" rx="4" fill="#fef7f6" stroke="#e8a9a3" stroke-width="1"/>
+    <text x="52" y="469" fill="#1a1a1a" font-weight="bold">BNotification</text>
+    <text x="52" y="485" fill="#5f6368">download finished, private message, name mentioned</text>
+    <rect x="600" y="452" width="400" height="40" rx="4" fill="#f2faf4" stroke="#9ccfab" stroke-width="1"/>
+    <text x="612" y="469" fill="#1a1a1a" font-weight="bold">org.freedesktop.Notifications (libnotify)</text>
+    <text x="612" y="485" fill="#5f6368">or QSystemTrayIcon::showMessage</text>
+    <line x1="444" y1="472" x2="596" y2="472" stroke="#9aa0a6" stroke-width="1.5" marker-end="url(#s1)"/>
+    <circle cx="520" cy="472" r="9" fill="#e6f4ea" stroke="#188038" stroke-width="1.5"/>
+    <text x="520" y="476" text-anchor="middle" font-size="10" font-weight="bold" fill="#0d652d">✓</text>
+
+    <!-- 9 -->
+    <rect x="40" y="500" width="400" height="40" rx="4" fill="#fef7f6" stroke="#e8a9a3" stroke-width="1"/>
+    <text x="52" y="517" fill="#1a1a1a" font-weight="bold">Tracker "open containing folder", BFilePanel</text>
+    <rect x="600" y="500" width="400" height="40" rx="4" fill="#f2faf4" stroke="#9ccfab" stroke-width="1"/>
+    <text x="612" y="517" fill="#1a1a1a" font-weight="bold">xdg-open · QFileDialog</text>
+    <text x="52" y="533" fill="#5f6368">plus drag-and-drop of query results out to the desktop</text>
+    <text x="612" y="533" fill="#5f6368">QDrag with text/uri-list — works with any file manager</text>
+    <line x1="444" y1="520" x2="596" y2="520" stroke="#9aa0a6" stroke-width="1.5" marker-end="url(#s1)"/>
+    <circle cx="520" cy="520" r="9" fill="#e6f4ea" stroke="#188038" stroke-width="1.5"/>
+    <text x="520" y="524" text-anchor="middle" font-size="10" font-weight="bold" fill="#0d652d">✓</text>
+
+    <!-- 10 -->
+    <rect x="40" y="548" width="400" height="40" rx="4" fill="#fef7f6" stroke="#e8a9a3" stroke-width="1"/>
+    <text x="52" y="565" fill="#1a1a1a" font-weight="bold">BMessage settings file, BPath find_directory()</text>
+    <rect x="600" y="548" width="400" height="40" rx="4" fill="#f2faf4" stroke="#9ccfab" stroke-width="1"/>
+    <text x="612" y="565" fill="#1a1a1a" font-weight="bold">muscle::Message flattened to $XDG_CONFIG_HOME</text>
+    <text x="52" y="581" fill="#5f6368">settings archived as a flattened BMessage</text>
+    <text x="612" y="581" fill="#5f6368">muscle Message already flattens portably — same idea</text>
+    <line x1="444" y1="568" x2="596" y2="568" stroke="#9aa0a6" stroke-width="1.5" marker-end="url(#s1)"/>
+    <circle cx="520" cy="568" r="9" fill="#e6f4ea" stroke="#188038" stroke-width="1.5"/>
+    <text x="520" y="572" text-anchor="middle" font-size="10" font-weight="bold" fill="#0d652d">✓</text>
+
+    <!-- 11 -->
+    <rect x="40" y="596" width="400" height="40" rx="4" fill="#fef7f6" stroke="#e8a9a3" stroke-width="1"/>
+    <text x="52" y="613" fill="#1a1a1a" font-weight="bold">PortMapper.cpp  (NAT-PMP / UPnP-IGD / PCP)</text>
+    <text x="52" y="629" fill="#5f6368">already plain BSD sockets — only 5 BeAPI touch points</text>
+    <rect x="600" y="596" width="400" height="40" rx="4" fill="#f2faf4" stroke="#9ccfab" stroke-width="1"/>
+    <text x="612" y="613" fill="#1a1a1a" font-weight="bold">Reuse nearly verbatim</text>
+    <text x="612" y="629" fill="#5f6368">swap BNetworkRoute gateway lookup for netlink / /proc</text>
+    <line x1="444" y1="616" x2="596" y2="616" stroke="#9aa0a6" stroke-width="1.5" marker-end="url(#s1)"/>
+    <circle cx="520" cy="616" r="9" fill="#e6f4ea" stroke="#188038" stroke-width="1.5"/>
+    <text x="520" y="620" text-anchor="middle" font-size="10" font-weight="bold" fill="#0d652d">✓</text>
+
+    <!-- 12 -->
+    <rect x="40" y="644" width="400" height="40" rx="4" fill="#fef7f6" stroke="#e8a9a3" stroke-width="1"/>
+    <text x="52" y="661" fill="#1a1a1a" font-weight="bold">MUSCLE 6.11 API idioms</text>
+    <text x="52" y="677" fill="#5f6368">Find*(name, &amp;charPtr) · status_t as an int</text>
+    <rect x="600" y="644" width="400" height="40" rx="4" fill="#f2faf4" stroke="#9ccfab" stroke-width="1"/>
+    <text x="612" y="661" fill="#1a1a1a" font-weight="bold">MUSCLE 9.92: Find*(name, charPtr&amp;) · status_t class</text>
+    <text x="612" y="677" fill="#5f6368">~116 mechanical call-site fixes across the tree</text>
+    <line x1="444" y1="664" x2="596" y2="664" stroke="#9aa0a6" stroke-width="1.5" marker-end="url(#s1)"/>
+    <circle cx="520" cy="664" r="9" fill="#fef7e0" stroke="#f9ab00" stroke-width="1.5"/>
+    <text x="520" y="668" text-anchor="middle" font-size="10" font-weight="bold" fill="#b06000">!</text>
+  </g>
+
+  <rect x="40" y="706" width="960" height="66" rx="6" fill="#f8f9fa" stroke="#dadce0" stroke-width="1.5"/>
+  <text x="56" y="726" font-size="12.5" font-weight="bold" fill="#3c4043">The headline: none of this touches the wire protocol.</text>
+  <text x="56" y="745" font-size="11.5" fill="#5f6368">Every byte HiTuxShare puts on the socket is identical to what BeShare 3.04 and HiShare 1.2 put there, so a Linux client shows up</text>
+  <text x="56" y="762" font-size="11.5" fill="#5f6368">in the same chat room, the same user list, and the same query results as the Haiku clients. Interoperability is the acceptance test.</text>
+</svg>

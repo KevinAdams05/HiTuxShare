@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="560" viewBox="0 0 1040 560" font-family="DejaVu Sans, Helvetica, Arial, sans-serif">
+  <rect width="1040" height="560" fill="#ffffff"/>
+  <defs>
+    <marker id="r1" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L10,3 z" fill="#5f6368"/>
+    </marker>
+  </defs>
+
+  <text x="520" y="34" text-anchor="middle" font-size="21" font-weight="bold" fill="#1a1a1a">HiTuxShare roadmap</text>
+  <text x="520" y="55" text-anchor="middle" font-size="13" fill="#5f6368">Each phase ends with something you can actually run against a live BeShare server</text>
+
+  <line x1="60" y1="120" x2="980" y2="120" stroke="#dadce0" stroke-width="3"/>
+
+  <!-- Phase 0 -->
+  <circle cx="120" cy="120" r="13" fill="#f9ab00" stroke="#ffffff" stroke-width="3"/>
+  <text x="120" y="125" text-anchor="middle" font-size="11" font-weight="bold" fill="#ffffff">0</text>
+  <rect x="40" y="150" width="185" height="180" rx="7" fill="#fef7e0" stroke="#f9ab00" stroke-width="2"/>
+  <text x="132" y="172" text-anchor="middle" font-size="13" font-weight="bold" fill="#b06000">Phase 0 — Skeleton</text>
+  <text x="132" y="188" text-anchor="middle" font-size="10.5" fill="#8a6100">small</text>
+  <g font-size="10.5" fill="#3c4043">
+    <text x="52" y="212">• repo + CMake + submodule</text>
+    <text x="52" y="230">• pin MUSCLE 9.92</text>
+    <text x="52" y="248">• hitux-probe CLI, adapted</text>
+    <text x="52" y="264">  from muscle/tools/chatclient</text>
+    <text x="52" y="282">• connect to a real server</text>
+    <text x="52" y="300">• CI: build + clang-tidy</text>
+  </g>
+  <rect x="40" y="336" width="185" height="34" rx="5" fill="#ffffff" stroke="#f9ab00" stroke-width="1.5"/>
+  <text x="132" y="350" text-anchor="middle" font-size="10" font-weight="bold" fill="#b06000">DONE WHEN</text>
+  <text x="132" y="364" text-anchor="middle" font-size="10" fill="#5f6368">we see live chat in a terminal</text>
+
+  <!-- Phase 1 -->
+  <circle cx="335" cy="120" r="13" fill="#1967d2" stroke="#ffffff" stroke-width="3"/>
+  <text x="335" y="125" text-anchor="middle" font-size="11" font-weight="bold" fill="#ffffff">1</text>
+  <rect x="243" y="150" width="185" height="180" rx="7" fill="#e8f0fe" stroke="#1967d2" stroke-width="2"/>
+  <text x="335" y="172" text-anchor="middle" font-size="13" font-weight="bold" fill="#174ea6">Phase 1 — Chat</text>
+  <text x="335" y="188" text-anchor="middle" font-size="10.5" fill="#174ea6">the bulk of the GUI work</text>
+  <g font-size="10.5" fill="#3c4043">
+    <text x="255" y="212">• Qt shell, splitters, menus</text>
+    <text x="255" y="230">• user list model + sort</text>
+    <text x="255" y="248">• chat log, /me, timestamps</text>
+    <text x="255" y="266">• private msgs + windows</text>
+    <text x="255" y="284">• slash commands, aliases</text>
+    <text x="255" y="302">• settings persistence</text>
+  </g>
+  <rect x="243" y="336" width="185" height="34" rx="5" fill="#ffffff" stroke="#1967d2" stroke-width="1.5"/>
+  <text x="335" y="350" text-anchor="middle" font-size="10" font-weight="bold" fill="#174ea6">DONE WHEN</text>
+  <text x="335" y="364" text-anchor="middle" font-size="10" fill="#5f6368">a Haiku user can /msg us back</text>
+
+  <!-- Phase 2 -->
+  <circle cx="550" cy="120" r="13" fill="#188038" stroke="#ffffff" stroke-width="3"/>
+  <text x="550" y="125" text-anchor="middle" font-size="11" font-weight="bold" fill="#ffffff">2</text>
+  <rect x="458" y="150" width="185" height="180" rx="7" fill="#e6f4ea" stroke="#188038" stroke-width="2"/>
+  <text x="550" y="172" text-anchor="middle" font-size="13" font-weight="bold" fill="#0d652d">Phase 2 — Download</text>
+  <text x="550" y="188" text-anchor="middle" font-size="10.5" fill="#0d652d">hardest correctness work</text>
+  <g font-size="10.5" fill="#3c4043">
+    <text x="470" y="212">• live query subscriptions</text>
+    <text x="470" y="230">• results model (10k+ rows)</text>
+    <text x="470" y="248">• peer connect + FILE_DATA</text>
+    <text x="470" y="266">• resume, checksums, munge</text>
+    <text x="470" y="284">• connect-back for firewalled</text>
+    <text x="470" y="302">• transfer queue + rate limit</text>
+  </g>
+  <rect x="458" y="336" width="185" height="34" rx="5" fill="#ffffff" stroke="#188038" stroke-width="1.5"/>
+  <text x="550" y="350" text-anchor="middle" font-size="10" font-weight="bold" fill="#0d652d">DONE WHEN</text>
+  <text x="550" y="364" text-anchor="middle" font-size="10" fill="#5f6368">byte-identical file off a peer</text>
+
+  <!-- Phase 3 -->
+  <circle cx="765" cy="120" r="13" fill="#9334e6" stroke="#ffffff" stroke-width="3"/>
+  <text x="765" y="125" text-anchor="middle" font-size="11" font-weight="bold" fill="#ffffff">3</text>
+  <rect x="673" y="150" width="185" height="180" rx="7" fill="#f3e8fd" stroke="#9334e6" stroke-width="2"/>
+  <text x="765" y="172" text-anchor="middle" font-size="13" font-weight="bold" fill="#6a1b9a">Phase 3 — Share</text>
+  <text x="765" y="188" text-anchor="middle" font-size="10.5" fill="#6a1b9a">makes us a real peer</text>
+  <g font-size="10.5" fill="#3c4043">
+    <text x="685" y="212">• inotify share scanner</text>
+    <text x="685" y="230">• publish beshare/files/*</text>
+    <text x="685" y="248">• accept factory + upload</text>
+    <text x="685" y="266">• upload queue, stats, bans</text>
+    <text x="685" y="284">• PortMapper port</text>
+    <text x="685" y="302">• firewalled mode</text>
+  </g>
+  <rect x="673" y="336" width="185" height="34" rx="5" fill="#ffffff" stroke="#9334e6" stroke-width="1.5"/>
+  <text x="765" y="350" text-anchor="middle" font-size="10" font-weight="bold" fill="#6a1b9a">DONE WHEN</text>
+  <text x="765" y="364" text-anchor="middle" font-size="10" fill="#5f6368">Haiku HiShare pulls from us</text>
+
+  <!-- Phase 4 -->
+  <circle cx="930" cy="120" r="13" fill="#80868b" stroke="#ffffff" stroke-width="3"/>
+  <text x="930" y="125" text-anchor="middle" font-size="11" font-weight="bold" fill="#ffffff">4</text>
+  <rect x="876" y="150" width="124" height="180" rx="7" fill="#f1f3f4" stroke="#80868b" stroke-width="2"/>
+  <text x="938" y="172" text-anchor="middle" font-size="13" font-weight="bold" fill="#3c4043">Phase 4</text>
+  <text x="938" y="188" text-anchor="middle" font-size="10.5" fill="#3c4043">Polish</text>
+  <g font-size="10.5" fill="#3c4043">
+    <text x="888" y="212">• notifications</text>
+    <text x="888" y="230">• gettext i18n</text>
+    <text x="888" y="248">• drag &amp; drop</text>
+    <text x="888" y="266">• .desktop file</text>
+    <text x="888" y="284">• deb / Flatpak</text>
+    <text x="888" y="302">• multi-server</text>
+  </g>
+
+  <line x1="228" y1="240" x2="240" y2="240" stroke="#5f6368" stroke-width="2" marker-end="url(#r1)"/>
+  <line x1="431" y1="240" x2="455" y2="240" stroke="#5f6368" stroke-width="2" marker-end="url(#r1)"/>
+  <line x1="646" y1="240" x2="670" y2="240" stroke="#5f6368" stroke-width="2" marker-end="url(#r1)"/>
+  <line x1="861" y1="240" x2="873" y2="240" stroke="#5f6368" stroke-width="2" marker-end="url(#r1)"/>
+
+  <rect x="40" y="400" width="960" height="132" rx="7" fill="#f8f9fa" stroke="#dadce0" stroke-width="1.5"/>
+  <text x="56" y="422" font-size="13" font-weight="bold" fill="#3c4043">Why this order</text>
+  <text x="56" y="444" font-size="11.5" fill="#5f6368">Phase 0 is deliberately not "set up the GUI". It proves the protocol against a live server before a single widget exists, so any</text>
+  <text x="56" y="462" font-size="11.5" fill="#5f6368">later bug is unambiguously a GUI bug or a logic bug — never a "is the wire format even right?" mystery. It costs almost nothing:</text>
+  <text x="56" y="480" font-size="11.5" fill="#5f6368">MUSCLE already ships tools/chatclient.cpp, a 355-line BeShare-compatible client that builds on Linux today.</text>
+  <text x="56" y="506" font-size="11.5" fill="#5f6368">Phase 2 before Phase 3 because downloading is the half you can test alone: point it at an existing Haiku peer that is already</text>
+  <text x="56" y="524" font-size="11.5" fill="#5f6368">sharing. Uploading needs someone else to pull from you, so it wants a working download client on the other end first.</text>
+</svg>

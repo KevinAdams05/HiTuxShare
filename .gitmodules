@@ -1,0 +1,3 @@
+[submodule "third_party/muscle"]
+	path = third_party/muscle
+	url = https://github.com/jfriesne/muscle.git

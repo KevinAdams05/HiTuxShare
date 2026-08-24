@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="700" viewBox="0 0 1040 700" font-family="DejaVu Sans, Helvetica, Arial, sans-serif">
+  <rect width="1040" height="700" fill="#ffffff"/>
+
+  <text x="520" y="34" text-anchor="middle" font-size="21" font-weight="bold" fill="#1a1a1a">HiTuxShare — layered architecture</text>
+  <text x="520" y="55" text-anchor="middle" font-size="13" fill="#5f6368">The core is toolkit-free; only the top layer knows what a widget is</text>
+
+  <!-- Front-ends -->
+  <rect x="30" y="78" width="980" height="96" rx="8" fill="#e8f0fe" stroke="#4285f4" stroke-width="2"/>
+  <text x="46" y="99" font-size="13" font-weight="bold" fill="#174ea6">FRONT-END LAYER  (one binary each, all optional except the primary)</text>
+
+  <rect x="46" y="110" width="290" height="50" rx="5" fill="#ffffff" stroke="#4285f4" stroke-width="2"/>
+  <text x="191" y="130" text-anchor="middle" font-size="13" font-weight="bold" fill="#174ea6">hitux  —  Qt 6 Widgets</text>
+  <text x="191" y="148" text-anchor="middle" font-size="11" fill="#5f6368">primary GUI · QTreeView + QSplitter</text>
+
+  <rect x="350" y="110" width="290" height="50" rx="5" fill="#ffffff" stroke="#8ab4f8" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="495" y="130" text-anchor="middle" font-size="13" fill="#174ea6">hitux-tui  —  ftxui  (optional)</text>
+  <text x="495" y="148" text-anchor="middle" font-size="11" fill="#5f6368">chat over SSH · protocol test harness</text>
+
+  <rect x="654" y="110" width="340" height="50" rx="5" fill="#ffffff" stroke="#8ab4f8" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="824" y="130" text-anchor="middle" font-size="13" fill="#174ea6">hitux-probe  —  headless CLI  (Phase 0)</text>
+  <text x="824" y="148" text-anchor="middle" font-size="11" fill="#5f6368">proves the wire protocol before any GUI exists</text>
+
+  <!-- Seam -->
+  <rect x="30" y="188" width="980" height="46" rx="8" fill="#fff4e5" stroke="#f59e0b" stroke-width="2"/>
+  <text x="46" y="207" font-size="13" font-weight="bold" fill="#b45309">THREAD SEAM — muscle::ICallbackMechanism</text>
+  <text x="46" y="225" font-size="11.5" fill="#78350f">Network thread signals the GUI thread. Qt: QPostEventCallbackMechanism (ships with MUSCLE) · GTK/FLTK: ~30 lines over an eventfd</text>
+
+  <!-- Core -->
+  <rect x="30" y="248" width="980" height="150" rx="8" fill="#e6f4ea" stroke="#34a853" stroke-width="2"/>
+  <text x="46" y="269" font-size="13" font-weight="bold" fill="#0d652d">libhitux-core  —  static lib, zero GUI dependencies  (this is where the port work lives)</text>
+
+  <rect x="46" y="280" width="182" height="46" rx="5" fill="#ffffff" stroke="#34a853" stroke-width="1.5"/>
+  <text x="137" y="299" text-anchor="middle" font-size="12" font-weight="bold" fill="#0d652d">ServerConnection</text>
+  <text x="137" y="316" text-anchor="middle" font-size="10.5" fill="#5f6368">login · name node · keepalive</text>
+
+  <rect x="238" y="280" width="182" height="46" rx="5" fill="#ffffff" stroke="#34a853" stroke-width="1.5"/>
+  <text x="329" y="299" text-anchor="middle" font-size="12" font-weight="bold" fill="#0d652d">UserRegistry</text>
+  <text x="329" y="316" text-anchor="middle" font-size="10.5" fill="#5f6368">session ID → user record</text>
+
+  <rect x="430" y="280" width="182" height="46" rx="5" fill="#ffffff" stroke="#34a853" stroke-width="1.5"/>
+  <text x="521" y="299" text-anchor="middle" font-size="12" font-weight="bold" fill="#0d652d">ChatSession</text>
+  <text x="521" y="316" text-anchor="middle" font-size="10.5" fill="#5f6368">what=2 · /me · private · ping</text>
+
+  <rect x="622" y="280" width="182" height="46" rx="5" fill="#ffffff" stroke="#34a853" stroke-width="1.5"/>
+  <text x="713" y="299" text-anchor="middle" font-size="12" font-weight="bold" fill="#0d652d">QueryEngine</text>
+  <text x="713" y="316" text-anchor="middle" font-size="10.5" fill="#5f6368">live subscriptions · results</text>
+
+  <rect x="814" y="280" width="180" height="46" rx="5" fill="#ffffff" stroke="#34a853" stroke-width="1.5"/>
+  <text x="904" y="299" text-anchor="middle" font-size="12" font-weight="bold" fill="#0d652d">Settings</text>
+  <text x="904" y="316" text-anchor="middle" font-size="10.5" fill="#5f6368">flattened Message file</text>
+
+  <rect x="46" y="336" width="245" height="46" rx="5" fill="#ffffff" stroke="#34a853" stroke-width="1.5"/>
+  <text x="168" y="355" text-anchor="middle" font-size="12" font-weight="bold" fill="#0d652d">TransferEngine</text>
+  <text x="168" y="372" text-anchor="middle" font-size="10.5" fill="#5f6368">peer TCP · resume · queue · rate limit</text>
+
+  <rect x="301" y="336" width="245" height="46" rx="5" fill="#ffffff" stroke="#34a853" stroke-width="1.5"/>
+  <text x="423" y="355" text-anchor="middle" font-size="12" font-weight="bold" fill="#0d652d">ShareScanner</text>
+  <text x="423" y="372" text-anchor="middle" font-size="10.5" fill="#5f6368">inotify tree watch → file nodes</text>
+
+  <rect x="556" y="336" width="245" height="46" rx="5" fill="#ffffff" stroke="#34a853" stroke-width="1.5"/>
+  <text x="678" y="355" text-anchor="middle" font-size="12" font-weight="bold" fill="#0d652d">PortMapper</text>
+  <text x="678" y="372" text-anchor="middle" font-size="10.5" fill="#5f6368">NAT-PMP · UPnP-IGD · PCP</text>
+
+  <rect x="811" y="336" width="183" height="46" rx="5" fill="#ffffff" stroke="#34a853" stroke-width="1.5"/>
+  <text x="902" y="355" text-anchor="middle" font-size="12" font-weight="bold" fill="#0d652d">MimeResolver</text>
+  <text x="902" y="372" text-anchor="middle" font-size="10.5" fill="#5f6368">beshare:Kind ↔ XDG type</text>
+
+  <!-- MUSCLE -->
+  <rect x="30" y="412" width="980" height="112" rx="8" fill="#f3e8fd" stroke="#9334e6" stroke-width="2"/>
+  <text x="46" y="433" font-size="13" font-weight="bold" fill="#6a1b9a">MUSCLE 9.92  —  upstream, UNMODIFIED  (git submodule · builds clean on Linux in ~10 s · libmuscle.a 8.2 MB)</text>
+
+  <rect x="46" y="444" width="180" height="30" rx="4" fill="#ffffff" stroke="#9334e6" stroke-width="1.5"/>
+  <text x="136" y="464" text-anchor="middle" font-size="11.5" fill="#6a1b9a">Message (flatten/unflatten)</text>
+
+  <rect x="236" y="444" width="180" height="30" rx="4" fill="#ffffff" stroke="#9334e6" stroke-width="1.5"/>
+  <text x="326" y="464" text-anchor="middle" font-size="11.5" fill="#6a1b9a">MessageIOGateway</text>
+
+  <rect x="426" y="444" width="180" height="30" rx="4" fill="#ffffff" stroke="#9334e6" stroke-width="1.5"/>
+  <text x="516" y="464" text-anchor="middle" font-size="11.5" fill="#6a1b9a">TCPSocketDataIO</text>
+
+  <rect x="616" y="444" width="180" height="30" rx="4" fill="#ffffff" stroke="#9334e6" stroke-width="1.5"/>
+  <text x="706" y="464" text-anchor="middle" font-size="11.5" fill="#6a1b9a">StorageReflectConstants</text>
+
+  <rect x="806" y="444" width="188" height="30" rx="4" fill="#ffffff" stroke="#9334e6" stroke-width="1.5"/>
+  <text x="900" y="464" text-anchor="middle" font-size="11.5" fill="#6a1b9a">StringMatcher (globs)</text>
+
+  <rect x="46" y="482" width="288" height="30" rx="4" fill="#ffffff" stroke="#9334e6" stroke-width="1.5"/>
+  <text x="190" y="502" text-anchor="middle" font-size="11.5" fill="#6a1b9a">CallbackMessageTransceiverThread</text>
+
+  <rect x="344" y="482" width="288" height="30" rx="4" fill="#ffffff" stroke="#9334e6" stroke-width="1.5"/>
+  <text x="488" y="502" text-anchor="middle" font-size="11.5" fill="#6a1b9a">ReflectServer + PutAcceptFactory()</text>
+
+  <rect x="642" y="482" width="180" height="30" rx="4" fill="#ffffff" stroke="#9334e6" stroke-width="1.5"/>
+  <text x="732" y="502" text-anchor="middle" font-size="11.5" fill="#6a1b9a">ZLibCodec</text>
+
+  <rect x="832" y="482" width="162" height="30" rx="4" fill="#ffffff" stroke="#9334e6" stroke-width="1.5"/>
+  <text x="913" y="502" text-anchor="middle" font-size="11.5" fill="#6a1b9a">RateLimitPolicy</text>
+
+  <!-- Platform -->
+  <rect x="30" y="538" width="980" height="76" rx="8" fill="#f1f3f4" stroke="#80868b" stroke-width="2"/>
+  <text x="46" y="559" font-size="13" font-weight="bold" fill="#3c4043">LINUX PLATFORM SERVICES  (replacing the Haiku kits)</text>
+
+  <rect x="46" y="570" width="148" height="30" rx="4" fill="#ffffff" stroke="#80868b" stroke-width="1.5"/>
+  <text x="120" y="590" text-anchor="middle" font-size="11.5" fill="#3c4043">inotify</text>
+  <rect x="204" y="570" width="148" height="30" rx="4" fill="#ffffff" stroke="#80868b" stroke-width="1.5"/>
+  <text x="278" y="590" text-anchor="middle" font-size="11.5" fill="#3c4043">xattr (user.*)</text>
+  <rect x="362" y="570" width="168" height="30" rx="4" fill="#ffffff" stroke="#80868b" stroke-width="1.5"/>
+  <text x="446" y="590" text-anchor="middle" font-size="11.5" fill="#3c4043">shared-mime-info</text>
+  <rect x="540" y="570" width="148" height="30" rx="4" fill="#ffffff" stroke="#80868b" stroke-width="1.5"/>
+  <text x="614" y="590" text-anchor="middle" font-size="11.5" fill="#3c4043">libnotify</text>
+  <rect x="698" y="570" width="148" height="30" rx="4" fill="#ffffff" stroke="#80868b" stroke-width="1.5"/>
+  <text x="772" y="590" text-anchor="middle" font-size="11.5" fill="#3c4043">xdg-open</text>
+  <rect x="856" y="570" width="138" height="30" rx="4" fill="#ffffff" stroke="#80868b" stroke-width="1.5"/>
+  <text x="925" y="590" text-anchor="middle" font-size="11.5" fill="#3c4043">BSD sockets</text>
+
+  <!-- Network endpoints -->
+  <rect x="180" y="638" width="290" height="42" rx="6" fill="#fce8e6" stroke="#d93025" stroke-width="2"/>
+  <text x="325" y="655" text-anchor="middle" font-size="12" font-weight="bold" fill="#a50e0e">muscled server  (TCP 2960)</text>
+  <text x="325" y="672" text-anchor="middle" font-size="10.5" fill="#5f6368">chat · user list · file index — never modified</text>
+
+  <rect x="570" y="638" width="290" height="42" rx="6" fill="#fce8e6" stroke="#d93025" stroke-width="2"/>
+  <text x="715" y="655" text-anchor="middle" font-size="12" font-weight="bold" fill="#a50e0e">peer clients  (direct TCP)</text>
+  <text x="715" y="672" text-anchor="middle" font-size="10.5" fill="#5f6368">file data never touches the server</text>
+
+  <path d="M 325 614 L 325 636" stroke="#d93025" stroke-width="2" marker-end="url(#ah)"/>
+  <path d="M 715 614 L 715 636" stroke="#d93025" stroke-width="2" marker-end="url(#ah)"/>
+
+  <defs>
+    <marker id="ah" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#d93025"/>
+    </marker>
+  </defs>
+</svg>
