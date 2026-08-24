@@ -8,3 +8,6 @@ compile_commands.json
 *.user
 .vscode/
 .idea/
+
+# Stray test output
+*.log
