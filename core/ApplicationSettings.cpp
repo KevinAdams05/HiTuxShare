@@ -12,6 +12,7 @@
 #include "util/StringTokenizer.h"
 
 #include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -40,6 +41,11 @@ const char* const kDefaultAwayStatus = "away";
 // The long-running public server the BeShare community has used for years.  It is a
 // starting point, not a hard-coded dependency -- the user can point anywhere.
 const char* const kDefaultServerAddress = "beshare.tycomsystems.com";
+
+// Sanity cap for the settings file.  It normally holds a few hundred bytes; the
+// only way past this is corruption, and refusing is better than allocating on a
+// bad length header.
+const uint32 kMaximumSettingsFileSize = 4 * 1024 * 1024;
 
 
 /** Returns the value of an environment variable, or an empty String if it is unset
@@ -96,12 +102,22 @@ status_t
 ApplicationSettings::Load()
 {
 	const String settingsPath = GetSettingsFilePath();
+	if (settingsPath.IsEmpty())
+		return B_BAD_OBJECT;
 
-	FileDataIO settingsFile(settingsPath(), "rb");
-	if (settingsFile.GetFile() == NULL)
+	// Open the file ourselves rather than letting FileDataIO(path, mode) do it: that
+	// constructor defers the fopen() until the first read, so there would be no point
+	// at which we could tell whether the file opened.
+	FILE* file = fopen(settingsPath(), "rb");
+	if (file == NULL)
 		return B_FILE_NOT_FOUND;
 
-	return fSettings.UnflattenFromDataIO(settingsFile, -1);
+	FileDataIO settingsFile(file);
+
+	// -1 means "read the four-byte length header first", which pairs with the
+	// addSizeHeader=true that Save() writes.  The cap stops a truncated or corrupt
+	// settings file from talking us into an enormous allocation.
+	return fSettings.UnflattenFromDataIO(settingsFile, -1, kMaximumSettingsFileSize);
 }
 
 
@@ -113,12 +129,15 @@ ApplicationSettings::Save() const
 		return directoryResult;
 
 	const String settingsPath = GetSettingsFilePath();
+	if (settingsPath.IsEmpty())
+		return B_BAD_OBJECT;
 
-	FileDataIO settingsFile(settingsPath(), "wb");
-	if (settingsFile.GetFile() == NULL)
-		return B_ACCESS_DENIED;
+	FILE* file = fopen(settingsPath(), "wb");
+	if (file == NULL)
+		return B_ERRNO;
 
-	return fSettings.FlattenToDataIO(settingsFile, false);
+	FileDataIO settingsFile(file);
+	return fSettings.FlattenToDataIO(settingsFile, true);
 }
 
 

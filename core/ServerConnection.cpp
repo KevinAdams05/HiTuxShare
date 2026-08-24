@@ -293,7 +293,29 @@ ServerConnection::_HandleDataItems(const Message& message)
 void
 ServerConnection::_HandleNodeRemoved(const String& nodePath)
 {
-	if (GetPathDepth(nodePath()) != SESSION_ID_DEPTH)
+	const int pathDepth = GetPathDepth(nodePath());
+
+	// A departing user can be reported to us in either of two shapes, and which one
+	// arrives depends on how the subscription matched rather than on anything we
+	// control:
+	//
+	//   /host/1                     -- the whole session node went away
+	//   /host/1/beshare/name        -- one removal per leaf our subscription matched
+	//
+	// Measured against muscled, "SUBSCRIBE:beshare/*" produces the second form: one
+	// removal for beshare/name, another for beshare/userstatus, and none at session
+	// depth at all.  Handling only the first form means users pile up in the list
+	// forever and never disappear.  The name node is the authoritative one -- a
+	// session with no name node is not a user any more.
+	bool isUserGone = false;
+	if (pathDepth == SESSION_ID_DEPTH) {
+		isUserGone = true;
+	} else if (pathDepth == USER_NAME_DEPTH) {
+		const char* nodeNameClause = GetPathClause(USER_NAME_DEPTH, nodePath());
+		isUserGone = (nodeNameClause != NULL && String(nodeNameClause).StartsWith("name"));
+	}
+
+	if (isUserGone == false)
 		return;
 
 	const String sessionId = _ExtractSessionId(nodePath);
