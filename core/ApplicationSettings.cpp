@@ -1,0 +1,302 @@
+/*
+ * Copyright 2026, Kevin Adams <kevinadams05@gmail.com>. All rights reserved.
+ * Distributed under the terms of the MIT License.
+ */
+
+#include "core/ApplicationSettings.h"
+
+#include "core/BeShareProtocol.h"
+
+#include "dataio/FileDataIO.h"
+#include "util/MiscUtilityFunctions.h"
+#include "util/StringTokenizer.h"
+
+#include <errno.h>
+#include <stdlib.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
+using namespace muscle;
+
+
+namespace hitux {
+
+
+namespace {
+
+
+const char* const kFieldUserName = "username";
+const char* const kFieldUserStatus = "userstatus";
+const char* const kFieldAwayStatus = "awaystatus";
+const char* const kFieldServerAddress = "server";
+const char* const kFieldServerPort = "serverport";
+const char* const kFieldInstallId = "installid";
+const char* const kFieldConnectOnStartup = "connectonstartup";
+
+const char* const kDefaultUserName = "binky";
+const char* const kDefaultUserStatus = "here";
+const char* const kDefaultAwayStatus = "away";
+
+// The long-running public server the BeShare community has used for years.  It is a
+// starting point, not a hard-coded dependency -- the user can point anywhere.
+const char* const kDefaultServerAddress = "beshare.tycomsystems.com";
+
+
+/** Returns the value of an environment variable, or an empty String if it is unset
+  * or empty.
+  * @param variableName the variable to read
+  */
+String
+GetEnvironmentVariable(const char* variableName)
+{
+	const char* value = getenv(variableName);
+	return (value != NULL && value[0] != '\0') ? String(value) : String();
+}
+
+
+/** Creates a directory and any missing parents, like "mkdir -p".
+  * @param directoryPath the directory to create
+  */
+status_t
+CreateDirectoryTree(const String& directoryPath)
+{
+	if (directoryPath.IsEmpty())
+		return B_BAD_ARGUMENT;
+
+	String pathSoFar;
+	StringTokenizer tokenizer(directoryPath(), "/");
+	const char* component = NULL;
+	while ((component = tokenizer.GetNextToken()) != NULL) {
+		pathSoFar += "/";
+		pathSoFar += component;
+
+		// EEXIST is the expected outcome for every component but the last.
+		if (mkdir(pathSoFar(), 0700) != 0 && errno != EEXIST)
+			return B_ERRNO;
+	}
+
+	return B_NO_ERROR;
+}
+
+
+}  // unnamed namespace
+
+
+ApplicationSettings::ApplicationSettings()
+{
+}
+
+
+ApplicationSettings::~ApplicationSettings()
+{
+}
+
+
+status_t
+ApplicationSettings::Load()
+{
+	const String settingsPath = GetSettingsFilePath();
+
+	FileDataIO settingsFile(settingsPath(), "rb");
+	if (settingsFile.GetFile() == NULL)
+		return B_FILE_NOT_FOUND;
+
+	return fSettings.UnflattenFromDataIO(settingsFile, -1);
+}
+
+
+status_t
+ApplicationSettings::Save() const
+{
+	const status_t directoryResult = CreateDirectoryTree(GetConfigDirectoryPath());
+	if (directoryResult.IsError())
+		return directoryResult;
+
+	const String settingsPath = GetSettingsFilePath();
+
+	FileDataIO settingsFile(settingsPath(), "wb");
+	if (settingsFile.GetFile() == NULL)
+		return B_ACCESS_DENIED;
+
+	return fSettings.FlattenToDataIO(settingsFile, false);
+}
+
+
+String
+ApplicationSettings::GetUserName() const
+{
+	return _GetString(kFieldUserName, kDefaultUserName);
+}
+
+
+void
+ApplicationSettings::SetUserName(const String& userName)
+{
+	_SetString(kFieldUserName, userName);
+}
+
+
+String
+ApplicationSettings::GetUserStatus() const
+{
+	return _GetString(kFieldUserStatus, kDefaultUserStatus);
+}
+
+
+void
+ApplicationSettings::SetUserStatus(const String& userStatus)
+{
+	_SetString(kFieldUserStatus, userStatus);
+}
+
+
+String
+ApplicationSettings::GetAwayStatus() const
+{
+	return _GetString(kFieldAwayStatus, kDefaultAwayStatus);
+}
+
+
+void
+ApplicationSettings::SetAwayStatus(const String& awayStatus)
+{
+	_SetString(kFieldAwayStatus, awayStatus);
+}
+
+
+String
+ApplicationSettings::GetServerAddress() const
+{
+	return _GetString(kFieldServerAddress, kDefaultServerAddress);
+}
+
+
+void
+ApplicationSettings::SetServerAddress(const String& serverAddress)
+{
+	_SetString(kFieldServerAddress, serverAddress);
+}
+
+
+uint16
+ApplicationSettings::GetServerPort() const
+{
+	int32 storedPort = 0;
+	if (fSettings.FindInt32(kFieldServerPort, storedPort).IsError())
+		return kDefaultServerPort;
+
+	if (storedPort <= 0 || storedPort > 65535)
+		return kDefaultServerPort;
+
+	return (uint16) storedPort;
+}
+
+
+void
+ApplicationSettings::SetServerPort(uint16 serverPort)
+{
+	(void) fSettings.ReplaceInt32(true, kFieldServerPort, (int32) serverPort);
+}
+
+
+bool
+ApplicationSettings::GetConnectOnStartup() const
+{
+	bool connectOnStartup = false;
+	(void) fSettings.FindBool(kFieldConnectOnStartup, connectOnStartup);
+	return connectOnStartup;
+}
+
+
+void
+ApplicationSettings::SetConnectOnStartup(bool connectOnStartup)
+{
+	(void) fSettings.ReplaceBool(true, kFieldConnectOnStartup, connectOnStartup);
+}
+
+
+uint64
+ApplicationSettings::GetInstallId()
+{
+	int64 storedInstallId = 0;
+	if (fSettings.FindInt64(kFieldInstallId, storedInstallId).IsOK()
+			&& storedInstallId != 0) {
+		return (uint64) storedInstallId;
+	}
+
+	// First run.  This only has to be stable and unlikely to collide -- it is a
+	// bookkeeping handle for upload bans, not a secret, so a cheap PRNG is right.
+	const uint64 newInstallId = GetInsecurePseudoRandomNumber64();
+	(void) fSettings.ReplaceInt64(true, kFieldInstallId, (int64) newInstallId);
+	return newInstallId;
+}
+
+
+String
+ApplicationSettings::GetConfigDirectoryPath()
+{
+	String configHome = GetEnvironmentVariable("XDG_CONFIG_HOME");
+	if (configHome.IsEmpty()) {
+		const String homeDirectory = GetEnvironmentVariable("HOME");
+		if (homeDirectory.IsEmpty())
+			return String();
+
+		configHome = homeDirectory + "/.config";
+	}
+
+	return configHome + "/hituxshare";
+}
+
+
+String
+ApplicationSettings::GetSettingsFilePath()
+{
+	const String configDirectory = GetConfigDirectoryPath();
+	if (configDirectory.IsEmpty())
+		return String();
+
+	return configDirectory + "/settings.msg";
+}
+
+
+String
+ApplicationSettings::GetDefaultDownloadDirectoryPath()
+{
+	const String homeDirectory = GetEnvironmentVariable("HOME");
+	if (homeDirectory.IsEmpty())
+		return String();
+
+	return homeDirectory + "/Downloads/HiTuxShare";
+}
+
+
+String
+ApplicationSettings::GetDefaultShareDirectoryPath()
+{
+	const String homeDirectory = GetEnvironmentVariable("HOME");
+	if (homeDirectory.IsEmpty())
+		return String();
+
+	return homeDirectory + "/HiTuxShare/shared";
+}
+
+
+String
+ApplicationSettings::_GetString(const char* fieldName, const String& defaultValue) const
+{
+	String value;
+	if (fSettings.FindString(fieldName, value).IsError() || value.IsEmpty())
+		return defaultValue;
+
+	return value;
+}
+
+
+void
+ApplicationSettings::_SetString(const char* fieldName, const String& value)
+{
+	(void) fSettings.ReplaceString(true, fieldName, value);
+}
+
+
+}  // namespace hitux
