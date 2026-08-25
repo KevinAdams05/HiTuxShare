@@ -394,9 +394,13 @@ def check_file(path, text, report):
                 and "toHtmlEscaped" not in uncommented:
             report(path, number, "html-unescaped")
 
-        if re.search(r'\b(?:printf|fprintf)\s*\(', code) \
-                and not relative.startswith(PRINTF_ALLOWED_PREFIXES):
-            report(path, number, "raw-printf")
+        # printf always, but fprintf only when it targets stdout or stderr.
+        # fprintf(someFile, ...) is how you write to a file, and flagging it
+        # made the rule fire on the chat logger doing exactly its job.
+        if not relative.startswith(PRINTF_ALLOWED_PREFIXES):
+            if re.search(r'(?<!\w)printf\s*\(', code) \
+                    or re.search(r'\bfprintf\s*\(\s*std(?:out|err)\b', code):
+                report(path, number, "raw-printf")
 
 
 def read_text(path):

@@ -43,6 +43,8 @@ const char* const kFieldMaxUploadRate = "maxuploadrate";
 const char* const kFieldFirewalled = "firewalled";
 const char* const kFieldAutoClear = "autoclear";
 const char* const kFieldChatFontPointSize = "chatfontsize";
+const char* const kFieldChatLogging = "chatlogging";
+const char* const kFieldLogDirectory = "logdir";
 const char* const kFieldIgnorePattern = "ignorepattern";
 const char* const kFieldWatchPattern = "watchpattern";
 const char* const kFieldAutoPrivPattern = "autoprivpattern";
@@ -487,6 +489,54 @@ ApplicationSettings::SetChatFontPointSize(uint32 chatFontPointSize)
 {
 	(void) fSettings.ReplaceInt32(true, kFieldChatFontPointSize,
 		(int32) chatFontPointSize);
+}
+
+
+bool
+ApplicationSettings::GetChatLoggingEnabled() const
+{
+	bool chatLoggingEnabled = false;
+	(void) fSettings.FindBool(kFieldChatLogging, chatLoggingEnabled);
+	return chatLoggingEnabled;
+}
+
+
+void
+ApplicationSettings::SetChatLoggingEnabled(bool chatLoggingEnabled)
+{
+	(void) fSettings.ReplaceBool(true, kFieldChatLogging, chatLoggingEnabled);
+}
+
+
+String
+ApplicationSettings::GetLogDirectory() const
+{
+	return _GetString(kFieldLogDirectory, GetDefaultLogDirectoryPath());
+}
+
+
+void
+ApplicationSettings::SetLogDirectory(const String& logDirectory)
+{
+	_SetString(kFieldLogDirectory, logDirectory);
+}
+
+
+String
+ApplicationSettings::GetDefaultLogDirectoryPath()
+{
+	// XDG_STATE_HOME is the right home for logs: they are neither
+	// configuration nor cached data, and they should survive a cache clear.
+	String stateHome = GetEnvironmentVariable("XDG_STATE_HOME");
+	if (stateHome.IsEmpty()) {
+		const String homeDirectory = GetEnvironmentVariable("HOME");
+		if (homeDirectory.IsEmpty())
+			return String();
+
+		stateHome = homeDirectory + "/.local/state";
+	}
+
+	return stateHome + "/hituxshare/logs";
 }
 
 

@@ -47,6 +47,7 @@ public:
 private slots:
 	void _OnBrowseDownloadFolder();
 	void _OnBrowseShareFolder();
+	void _OnBrowseLogFolder();
 
 private:
 	QWidget* _BuildIdentityPage();
@@ -77,6 +78,8 @@ private:
 
 	QCheckBox* fConnectOnStartupBox;
 	QCheckBox* fNotificationsBox;
+	QCheckBox* fChatLoggingBox;
+	QLineEdit* fLogFolderField;
 	QSpinBox* fChatFontSizeBox;
 };
 

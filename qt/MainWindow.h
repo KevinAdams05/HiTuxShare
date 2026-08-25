@@ -8,6 +8,7 @@
 
 #include "core/ApplicationSettings.h"
 #include "core/ChatAliases.h"
+#include "core/ChatLogger.h"
 #include "core/ChatCommandParser.h"
 #include "core/DownloadManager.h"
 #include "core/FileUploadServer.h"
@@ -207,6 +208,7 @@ private:
 	UserFilterSet fWatchFilter;
 	UserFilterSet fAutoPrivFilter;
 	ChatAliases fAliases;
+	ChatLogger fChatLogger;
 
 	muscle::Hashtable<muscle::String, SharedFile> fSharedFiles;
 	uint32 fSharedFileCount;

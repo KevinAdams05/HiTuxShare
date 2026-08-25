@@ -141,6 +141,18 @@ public:
 	uint32 GetChatFontPointSize() const;
 	void SetChatFontPointSize(uint32 chatFontPointSize);
 
+	/** Whether chat is written to a file. Off by default: a chat log records
+	  * other people's words on your disk, which should be a decision.
+	  */
+	bool GetChatLoggingEnabled() const;
+	void SetChatLoggingEnabled(bool chatLoggingEnabled);
+
+	/** Where chat logs are written. */
+	muscle::String GetLogDirectory() const;
+	void SetLogDirectory(const muscle::String& logDirectory);
+
+	static muscle::String GetDefaultLogDirectoryPath();
+
 	/** Comma-separated user filters. See UserFilterSet for the syntax. */
 	muscle::String GetIgnorePattern() const;
 	void SetIgnorePattern(const muscle::String& pattern);

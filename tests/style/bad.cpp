@@ -19,4 +19,5 @@ BadFunction(const char* name)
 
 	if (NULL == pointer)
 		printf("beshare/name %s\n", name);
+	fprintf(stderr, "also flagged\n");
 }

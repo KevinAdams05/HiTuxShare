@@ -686,6 +686,7 @@ MainWindow::ChatMessageReceived(const ChatMessage& message)
 	}
 
 	fChatLogView->AppendChatMessage(displayed);
+	fChatLogger.Log(displayed);
 	_MaybeNotifyAboutChat(message);
 }
 
@@ -1050,6 +1051,10 @@ MainWindow::_ApplySettings()
 
 	fNotifier->SetEnabled(fSettings.GetNotificationsEnabled());
 	fChatLogView->SetFontPointSize(fSettings.GetChatFontPointSize());
+
+	fChatLogger.SetLogDirectory(fSettings.GetLogDirectory());
+	fChatLogger.SetServerName(fSettings.GetServerAddress());
+	fChatLogger.SetEnabled(fSettings.GetChatLoggingEnabled());
 
 	fIgnoreFilter.SetPattern(fSettings.GetIgnorePattern());
 	fWatchFilter.SetPattern(fSettings.GetWatchPattern());
@@ -1424,6 +1429,7 @@ MainWindow::_SendChatToEveryone(const QString& text, bool isAction)
 		: ToMuscleString(text);
 
 	fChatLogView->AppendChatMessage(localEcho);
+	fChatLogger.Log(localEcho);
 }
 
 
@@ -1454,6 +1460,7 @@ MainWindow::_SendPrivateMessage(const QString& target, const QString& text)
 		localEcho.text = ToMuscleString(text);
 
 		fChatLogView->AppendChatMessage(localEcho);
+		fChatLogger.Log(localEcho);
 	}
 }
 

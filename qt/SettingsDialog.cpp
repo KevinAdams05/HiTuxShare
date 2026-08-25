@@ -214,6 +214,22 @@ SettingsDialog::_BuildBehaviourPage()
 		page);
 	layout->addRow(fNotificationsBox);
 
+	fChatLoggingBox = new QCheckBox(tr("Write chat to a log file"), page);
+	layout->addRow(fChatLoggingBox);
+
+	fLogFolderField = new QLineEdit(page);
+	QPushButton* browseLogs = nullptr;
+	layout->addRow(tr("Log folder:"),
+		MakePathRow(fLogFolderField, &browseLogs, page));
+	connect(browseLogs, &QPushButton::clicked,
+		this, &SettingsDialog::_OnBrowseLogFolder);
+
+	QLabel* logNote = new QLabel(tr("A chat log records other people's words on "
+		"your disk. One file per server per day."), page);
+	logNote->setWordWrap(true);
+	logNote->setEnabled(false);
+	layout->addRow(logNote);
+
 	fChatFontSizeBox = new QSpinBox(page);
 	fChatFontSizeBox->setRange(0, 32);
 	fChatFontSizeBox->setSpecialValueText(tr("System default"));
@@ -248,6 +264,8 @@ SettingsDialog::_LoadFromSettings()
 	fConnectOnStartupBox->setChecked(fSettings.GetConnectOnStartup());
 	fNotificationsBox->setChecked(fSettings.GetNotificationsEnabled());
 	fChatFontSizeBox->setValue((int) fSettings.GetChatFontPointSize());
+	fChatLoggingBox->setChecked(fSettings.GetChatLoggingEnabled());
+	fLogFolderField->setText(ToQString(fSettings.GetLogDirectory()));
 }
 
 
@@ -282,6 +300,8 @@ SettingsDialog::ApplyToSettings()
 	fSettings.SetConnectOnStartup(fConnectOnStartupBox->isChecked());
 	fSettings.SetNotificationsEnabled(fNotificationsBox->isChecked());
 	fSettings.SetChatFontPointSize((uint32) fChatFontSizeBox->value());
+	fSettings.SetChatLoggingEnabled(fChatLoggingBox->isChecked());
+	fSettings.SetLogDirectory(ToMuscleString(fLogFolderField->text().trimmed()));
 }
 
 
@@ -292,6 +312,16 @@ SettingsDialog::_OnBrowseDownloadFolder()
 		tr("Choose a folder for downloads"), fDownloadFolderField->text());
 	if (chosen.isEmpty() == false)
 		fDownloadFolderField->setText(chosen);
+}
+
+
+void
+SettingsDialog::_OnBrowseLogFolder()
+{
+	const QString chosen = QFileDialog::getExistingDirectory(this,
+		tr("Choose a folder for chat logs"), fLogFolderField->text());
+	if (chosen.isEmpty() == false)
+		fLogFolderField->setText(chosen);
 }
 
 

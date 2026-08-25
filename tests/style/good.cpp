@@ -7,6 +7,8 @@
 
 #include "util/Queue.h"
 
+#include <stdio.h>
+
 
 namespace hitux {
 
@@ -19,6 +21,16 @@ namespace hitux {
  * The same again in a block comment, spanning lines, mentioning
  * "SUBSCRIBE:beshare/*" and nullptr and TRUE and a long value.
  */
+
+
+/** Writing to a file handle is not a stray debug print, and must not be
+  * reported. This line is the regression guard for that.
+  */
+void
+WriteReport(FILE* reportFile, const GoodRecord& record)
+{
+	fprintf(reportFile, "%s %u\n", record.name(), record.itemCount);
+}
 
 
 /** Counts the ready records in (records).
