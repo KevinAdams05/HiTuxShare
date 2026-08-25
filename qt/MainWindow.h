@@ -7,9 +7,12 @@
 
 
 #include "core/ApplicationSettings.h"
+#include "core/ChatAliases.h"
+#include "core/ChatCommandParser.h"
 #include "core/DownloadManager.h"
 #include "core/FileUploadServer.h"
 #include "core/ShareScanner.h"
+#include "core/UserFilterSet.h"
 #include "core/ServerConnection.h"
 #include "core/ServerConnectionListener.h"
 
@@ -128,6 +131,10 @@ private:
 	QString _GetSelectedServerAddress() const;
 	void _UpdateStatusBar();
 	void _SetUserStatus(const muscle::String& status);
+	void _HandleFilterCommand(UserFilterSet& filter, const muscle::String& argument,
+		const QString& filterName, void (ApplicationSettings::*setter)(
+			const muscle::String&));
+	void _HandleAliasCommand(const ChatCommand& command);
 	void _ApplySettings();
 	void _StartSharing();
 	void _StopSharing();
@@ -195,6 +202,11 @@ private:
 	DownloadManager fDownloads;
 	ShareScanner fShareScanner;
 	FileUploadServer fUploadServer;
+
+	UserFilterSet fIgnoreFilter;
+	UserFilterSet fWatchFilter;
+	UserFilterSet fAutoPrivFilter;
+	ChatAliases fAliases;
 
 	muscle::Hashtable<muscle::String, SharedFile> fSharedFiles;
 	uint32 fSharedFileCount;

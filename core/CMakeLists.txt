@@ -6,6 +6,7 @@
 
 add_library(hitux-core STATIC
     ApplicationSettings.cpp
+    ChatAliases.cpp
     ChatCommandParser.cpp
     DownloadManager.cpp
     FileDownload.cpp
@@ -13,6 +14,7 @@ add_library(hitux-core STATIC
     FormatUtilities.cpp
     MimeTypeGuesser.cpp
     ShareScanner.cpp
+    UserFilterSet.cpp
     ServerConnection.cpp
     UserRegistry.cpp
 )

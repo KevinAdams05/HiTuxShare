@@ -480,6 +480,17 @@ HandleUserInput(const String& line, ServerConnection& connection,
 			listener.RequestQuit();
 			break;
 
+		case CHAT_COMMAND_IGNORE:
+		case CHAT_COMMAND_WATCH:
+		case CHAT_COMMAND_AUTOPRIV:
+		case CHAT_COMMAND_ALIAS:
+		case CHAT_COMMAND_UNALIAS:
+			// The probe is a protocol harness, not a chat client: these are
+			// presentation features that live in the GUI.
+			printf("*** /%s is only available in the GUI.\n",
+				command.commandName());
+			break;
+
 		case CHAT_COMMAND_UNKNOWN:
 			printf("*** Unknown command \"/%s\". Try /help.\n", command.commandName());
 			break;

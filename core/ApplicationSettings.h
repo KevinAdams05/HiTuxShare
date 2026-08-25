@@ -7,6 +7,7 @@
 
 
 #include "message/Message.h"
+#include "util/Hashtable.h"
 #include "util/Queue.h"
 #include "util/String.h"
 
@@ -139,6 +140,23 @@ public:
 	/** Chat font point size; zero means follow the system font. */
 	uint32 GetChatFontPointSize() const;
 	void SetChatFontPointSize(uint32 chatFontPointSize);
+
+	/** Comma-separated user filters. See UserFilterSet for the syntax. */
+	muscle::String GetIgnorePattern() const;
+	void SetIgnorePattern(const muscle::String& pattern);
+
+	muscle::String GetWatchPattern() const;
+	void SetWatchPattern(const muscle::String& pattern);
+
+	muscle::String GetAutoPrivPattern() const;
+	void SetAutoPrivPattern(const muscle::String& pattern);
+
+	/** Chat aliases, stored as parallel name and value fields the way HiShare
+	  * stores them, so the two settings files stay legible side by side.
+	  */
+	muscle::Hashtable<muscle::String, muscle::String> GetAliases() const;
+	void SetAliases(
+		const muscle::Hashtable<muscle::String, muscle::String>& aliases);
 
 	bool GetRetainFilePaths() const;
 	void SetRetainFilePaths(bool retainFilePaths);

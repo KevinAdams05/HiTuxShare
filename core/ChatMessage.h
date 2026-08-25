@@ -44,7 +44,8 @@ struct ChatMessage
 		type(LOG_INFORMATION_MESSAGE),
 		isPrivate(false),
 		isAction(false),
-		isFromLocalUser(false)
+		isFromLocalUser(false),
+		isHighlighted(false)
 	{
 	}
 
@@ -54,7 +55,8 @@ struct ChatMessage
 		text(messageText),
 		isPrivate(false),
 		isAction(false),
-		isFromLocalUser(false)
+		isFromLocalUser(false),
+		isHighlighted(false)
 	{
 	}
 
@@ -77,6 +79,10 @@ struct ChatMessage
 	bool isAction;
 
 	bool isFromLocalUser;
+
+	// Set by the front-end for a line it wants to stand out -- a watched user,
+	// for instance. The core never sets it; it is a presentation decision.
+	bool isHighlighted;
 };
 
 

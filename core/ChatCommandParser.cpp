@@ -38,6 +38,11 @@ const CommandTableEntry kCommandTable[] = {
 	{ "query",      CHAT_COMMAND_START_QUERY, false },
 	{ "stop",       CHAT_COMMAND_STOP_QUERY, false },
 	{ "get",        CHAT_COMMAND_GET,        false },
+	{ "ignore",     CHAT_COMMAND_IGNORE,     false },
+	{ "watch",      CHAT_COMMAND_WATCH,      false },
+	{ "autopriv",   CHAT_COMMAND_AUTOPRIV,   false },
+	{ "alias",      CHAT_COMMAND_ALIAS,      true  },
+	{ "unalias",    CHAT_COMMAND_UNALIAS,    false },
 	{ "disconnect", CHAT_COMMAND_DISCONNECT, false },
 	{ "clear",      CHAT_COMMAND_CLEAR,      false },
 	{ "help",       CHAT_COMMAND_HELP,       false },
@@ -145,6 +150,11 @@ ChatCommandParser::GetHelpEntries()
 		{ "start",      "<pattern>",     "Search shared files, e.g. /start *.hpkg" },
 		{ "stop",       NULL,            "Stop the running search" },
 		{ "get",        "<number>",      "Download a numbered search result" },
+		{ "alias",      "<name> <text>", "Make /name expand to some text" },
+		{ "autopriv",   "[users]",       "Always notify me about these users, focused or not" },
+		{ "ignore",     "[users]",       "Hide chat from these users; no argument clears" },
+		{ "unalias",    "<name>",        "Remove an alias" },
+		{ "watch",      "[users]",       "Highlight and notify for these users" },
 		{ "status",     "<status>",      "Set your status string" }
 	};
 

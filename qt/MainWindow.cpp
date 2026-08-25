@@ -667,7 +667,25 @@ MainWindow::UserLeft(const UserRecord& user)
 void
 MainWindow::ChatMessageReceived(const ChatMessage& message)
 {
-	fChatLogView->AppendChatMessage(message);
+	// Ignored users are dropped before anything else sees them: not logged, not
+	// counted, not notified. A half-ignored user is worse than none.
+	if (message.type == LOG_REMOTE_USER_CHAT_MESSAGE
+			&& fIgnoreFilter.Matches(message.senderName,
+				message.senderSessionId)) {
+		return;
+	}
+
+	ChatMessage displayed = message;
+
+	// A watched user's lines are marked for highlighting, so they stand out in a
+	// busy room without a sound or a popup.
+	if (message.type == LOG_REMOTE_USER_CHAT_MESSAGE
+			&& fWatchFilter.Matches(message.senderName,
+				message.senderSessionId)) {
+		displayed.isHighlighted = true;
+	}
+
+	fChatLogView->AppendChatMessage(displayed);
 	_MaybeNotifyAboutChat(message);
 }
 
@@ -927,6 +945,90 @@ MainWindow::_SetUserStatus(const muscle::String& status)
 
 
 void
+MainWindow::_HandleFilterCommand(UserFilterSet& filter,
+	const muscle::String& argument, const QString& filterName,
+	void (ApplicationSettings::*setter)(const muscle::String&))
+{
+	// No argument reports the current list; that is more useful than an error,
+	// and it is how you find out what you set three weeks ago.
+	if (argument.IsEmpty()) {
+		_AppendLocalLine(LOG_INFORMATION_MESSAGE, filter.IsEmpty()
+			? tr("%1 list is empty.").arg(filterName)
+			: tr("%1 list: %2").arg(filterName,
+				ToQString(filter.GetPattern())));
+		return;
+	}
+
+	if (argument == "-") {
+		filter.Clear();
+		(fSettings.*setter)(filter.GetPattern());
+		(void) fSettings.Save();
+		_AppendLocalLine(LOG_INFORMATION_MESSAGE,
+			tr("%1 list cleared.").arg(filterName));
+		return;
+	}
+
+	filter.SetPattern(argument);
+	(fSettings.*setter)(filter.GetPattern());
+	(void) fSettings.Save();
+
+	_AppendLocalLine(LOG_INFORMATION_MESSAGE,
+		tr("%1 list set to: %2").arg(filterName, ToQString(filter.GetPattern())));
+}
+
+
+void
+MainWindow::_HandleAliasCommand(const ChatCommand& command)
+{
+	if (command.type == CHAT_COMMAND_UNALIAS) {
+		if (command.argument.IsEmpty()) {
+			_AppendLocalLine(LOG_WARNING_MESSAGE, tr("Usage: /unalias <name>"));
+			return;
+		}
+
+		_AppendLocalLine(LOG_INFORMATION_MESSAGE,
+			fAliases.RemoveAlias(command.argument)
+				? tr("Alias /%1 removed.").arg(ToQString(command.argument))
+				: tr("No alias called /%1.").arg(ToQString(command.argument)));
+	} else {
+		if (command.target.IsEmpty()) {
+			if (fAliases.GetCount() == 0) {
+				_AppendLocalLine(LOG_INFORMATION_MESSAGE,
+					tr("No aliases defined. Try /alias hi /me waves"));
+				return;
+			}
+
+			_AppendLocalLine(LOG_INFORMATION_MESSAGE, tr("Aliases:"));
+			const Hashtable<muscle::String, muscle::String>& aliases
+				= fAliases.GetAliases();
+			for (auto iterator = aliases.GetIterator(); iterator.HasData();
+					iterator++) {
+				_AppendLocalLine(LOG_INFORMATION_MESSAGE,
+					QStringLiteral("  /%1 -> %2")
+						.arg(ToQString(iterator.GetKey()),
+							ToQString(iterator.GetValue())));
+			}
+			return;
+		}
+
+		if (command.argument.IsEmpty()) {
+			_AppendLocalLine(LOG_WARNING_MESSAGE,
+				tr("Usage: /alias <name> <what it expands to>"));
+			return;
+		}
+
+		fAliases.SetAlias(command.target, command.argument);
+		_AppendLocalLine(LOG_INFORMATION_MESSAGE,
+			tr("/%1 now expands to: %2").arg(ToQString(command.target),
+				ToQString(command.argument)));
+	}
+
+	fSettings.SetAliases(fAliases.GetAliases());
+	(void) fSettings.Save();
+}
+
+
+void
 MainWindow::_ApplySettings()
 {
 	// One place where stored settings become running behaviour, so a new
@@ -948,6 +1050,18 @@ MainWindow::_ApplySettings()
 
 	fNotifier->SetEnabled(fSettings.GetNotificationsEnabled());
 	fChatLogView->SetFontPointSize(fSettings.GetChatFontPointSize());
+
+	fIgnoreFilter.SetPattern(fSettings.GetIgnorePattern());
+	fWatchFilter.SetPattern(fSettings.GetWatchPattern());
+	fAutoPrivFilter.SetPattern(fSettings.GetAutoPrivPattern());
+
+	fAliases.Clear();
+	const Hashtable<muscle::String, muscle::String> storedAliases
+		= fSettings.GetAliases();
+	for (auto iterator = storedAliases.GetIterator(); iterator.HasData();
+			iterator++) {
+		fAliases.SetAlias(iterator.GetKey(), iterator.GetValue());
+	}
 
 	fUserNameField->setText(ToQString(fSettings.GetUserName()));
 
@@ -1155,7 +1269,10 @@ MainWindow::_OnToggleTimestamps(bool showTimestamps)
 void
 MainWindow::_HandleUserInput(const QString& input)
 {
-	const ChatCommand command = ChatCommandParser::Parse(ToMuscleString(input));
+	// Aliases are expanded before parsing, so an alias may expand to any command
+	// including another alias's text -- but only once, so nothing can loop.
+	const muscle::String expanded = fAliases.Expand(ToMuscleString(input));
+	const ChatCommand command = ChatCommandParser::Parse(expanded);
 
 	switch (command.type) {
 		case CHAT_COMMAND_NONE:
@@ -1235,6 +1352,26 @@ MainWindow::_HandleUserInput(const QString& input)
 
 		case CHAT_COMMAND_GET:
 			_DownloadSelectedResults();
+			break;
+
+		case CHAT_COMMAND_IGNORE:
+			_HandleFilterCommand(fIgnoreFilter, command.argument, tr("Ignore"),
+				&ApplicationSettings::SetIgnorePattern);
+			break;
+
+		case CHAT_COMMAND_WATCH:
+			_HandleFilterCommand(fWatchFilter, command.argument, tr("Watch"),
+				&ApplicationSettings::SetWatchPattern);
+			break;
+
+		case CHAT_COMMAND_AUTOPRIV:
+			_HandleFilterCommand(fAutoPrivFilter, command.argument,
+				tr("Always-notify"), &ApplicationSettings::SetAutoPrivPattern);
+			break;
+
+		case CHAT_COMMAND_ALIAS:
+		case CHAT_COMMAND_UNALIAS:
+			_HandleAliasCommand(command);
 			break;
 
 		case CHAT_COMMAND_CLEAR:
@@ -1628,14 +1765,30 @@ MainWindow::_MaybeNotifyAboutChat(const ChatMessage& message)
 	if (fNotifier == nullptr || message.isFromLocalUser)
 		return;
 
-	// Notifying about a window the user is already looking at is pure noise.
-	if (_UserIsLookingAtUs())
-		return;
-
 	if (message.type != LOG_REMOTE_USER_CHAT_MESSAGE)
 		return;
 
 	const QString sender = ToQString(message.senderName);
+
+	// An autopriv user is the one case that interrupts even a focused window.
+	// HiShare opens a private chat window for these people; we show private
+	// messages inline, so the closest honest equivalent is to always announce
+	// them rather than to pretend a window appeared.
+	if (fAutoPrivFilter.Matches(message.senderName, message.senderSessionId)) {
+		fNotifier->Notify(DesktopNotifier::CATEGORY_CHAT,
+			tr("%1 says").arg(sender), ToQString(message.text));
+		return;
+	}
+
+	// Everything below is noise if the user is already looking at the window.
+	if (_UserIsLookingAtUs())
+		return;
+
+	if (fWatchFilter.Matches(message.senderName, message.senderSessionId)) {
+		fNotifier->Notify(DesktopNotifier::CATEGORY_CHAT,
+			tr("%1 says").arg(sender), ToQString(message.text));
+		return;
+	}
 
 	if (message.isPrivate) {
 		fNotifier->Notify(DesktopNotifier::CATEGORY_CHAT,

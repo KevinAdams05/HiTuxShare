@@ -79,12 +79,21 @@ ChatLogView::AppendChatMessage(const ChatMessage& message)
 		html += QStringLiteral("<span style=\"color:%1;\">%2</span>")
 			.arg(color.name(), text);
 	} else {
+		// A highlighted line colours its *text* as well as its name, because
+		// the name is already coloured on every line and so cannot carry the
+		// distinction on its own.
+		const QColor textColor = message.isHighlighted
+			? _GetColorForMessageType(LOG_USER_EVENT_MESSAGE)
+			: palette().color(QPalette::Text);
+
 		html += QStringLiteral("<b style=\"color:%1;\">&lt;%2&gt;</b> "
-			"<span style=\"color:%3;\">%4</span>")
+			"<span style=\"color:%3;%4\">%5</span>")
 			.arg(_GetColorForMessageType(message.isFromLocalUser
 					? LOG_LOCAL_USER_CHAT_MESSAGE : LOG_REMOTE_USER_CHAT_MESSAGE).name(),
 				senderName,
-				palette().color(QPalette::Text).name(),
+				textColor.name(),
+				message.isHighlighted ? QStringLiteral("font-weight:bold;")
+					: QString(),
 				text);
 	}
 

@@ -43,6 +43,11 @@ const char* const kFieldMaxUploadRate = "maxuploadrate";
 const char* const kFieldFirewalled = "firewalled";
 const char* const kFieldAutoClear = "autoclear";
 const char* const kFieldChatFontPointSize = "chatfontsize";
+const char* const kFieldIgnorePattern = "ignorepattern";
+const char* const kFieldWatchPattern = "watchpattern";
+const char* const kFieldAutoPrivPattern = "autoprivpattern";
+const char* const kFieldAliasName = "aliasname";
+const char* const kFieldAliasValue = "aliasvalue";
 
 // Chosen to be neighbourly rather than fast. Three at a time saturates a home
 // link perfectly well, and a peer serving one file at a time is the norm on
@@ -482,6 +487,79 @@ ApplicationSettings::SetChatFontPointSize(uint32 chatFontPointSize)
 {
 	(void) fSettings.ReplaceInt32(true, kFieldChatFontPointSize,
 		(int32) chatFontPointSize);
+}
+
+
+String
+ApplicationSettings::GetIgnorePattern() const
+{
+	return _GetString(kFieldIgnorePattern, String());
+}
+
+
+void
+ApplicationSettings::SetIgnorePattern(const String& pattern)
+{
+	_SetString(kFieldIgnorePattern, pattern);
+}
+
+
+String
+ApplicationSettings::GetWatchPattern() const
+{
+	return _GetString(kFieldWatchPattern, String());
+}
+
+
+void
+ApplicationSettings::SetWatchPattern(const String& pattern)
+{
+	_SetString(kFieldWatchPattern, pattern);
+}
+
+
+String
+ApplicationSettings::GetAutoPrivPattern() const
+{
+	return _GetString(kFieldAutoPrivPattern, String());
+}
+
+
+void
+ApplicationSettings::SetAutoPrivPattern(const String& pattern)
+{
+	_SetString(kFieldAutoPrivPattern, pattern);
+}
+
+
+Hashtable<String, String>
+ApplicationSettings::GetAliases() const
+{
+	Hashtable<String, String> aliases;
+
+	String name;
+	String value;
+	for (int32 i = 0; fSettings.FindString(kFieldAliasName, i, name).IsOK(); i++) {
+		// Parallel arrays, so a missing value means the pair is broken and the
+		// alias is skipped rather than defined as empty.
+		if (fSettings.FindString(kFieldAliasValue, i, value).IsOK())
+			(void) aliases.Put(name, value);
+	}
+
+	return aliases;
+}
+
+
+void
+ApplicationSettings::SetAliases(const Hashtable<String, String>& aliases)
+{
+	(void) fSettings.RemoveName(kFieldAliasName);
+	(void) fSettings.RemoveName(kFieldAliasValue);
+
+	for (auto iterator = aliases.GetIterator(); iterator.HasData(); iterator++) {
+		(void) fSettings.AddString(kFieldAliasName, iterator.GetKey());
+		(void) fSettings.AddString(kFieldAliasValue, iterator.GetValue());
+	}
 }
 
 
