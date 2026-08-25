@@ -10,6 +10,7 @@
 #include "core/HiTuxShareVersion.h"
 #include "qt/ChatInputLine.h"
 #include "qt/ChatLogView.h"
+#include "qt/DesktopNotifier.h"
 #include "qt/FileResultModel.h"
 #include "qt/QtConversions.h"
 #include "qt/TransferModel.h"
@@ -121,6 +122,8 @@ MainWindow::MainWindow(QWidget* parent)
 	fShowTimestampsAction(nullptr),
 	fShowHostColumnAction(nullptr),
 	fFileSharingAction(nullptr),
+	fNotificationsAction(nullptr),
+	fNotifier(nullptr),
 	fIdleTimer(nullptr),
 	fResultFlushTimer(nullptr),
 	fUserNamesDirty(false),
@@ -153,6 +156,9 @@ MainWindow::MainWindow(QWidget* parent)
 		this, &MainWindow::_OnFlushPendingResults);
 
 	fResultsModel->SetUserRegistry(&fConnection.GetUsers());
+
+	fNotifier = new DesktopNotifier(this);
+	fNotifier->SetEnabled(fSettings.GetNotificationsEnabled());
 
 	fDownloads.SetListener(this);
 	fUploadServer.SetListener(this);
@@ -469,6 +475,12 @@ MainWindow::_BuildMenus()
 	connect(fShowTimestampsAction, &QAction::toggled,
 		this, &MainWindow::_OnToggleTimestamps);
 
+	fNotificationsAction = viewMenu->addAction(tr("Desktop &notifications"));
+	fNotificationsAction->setCheckable(true);
+	fNotificationsAction->setChecked(true);
+	connect(fNotificationsAction, &QAction::toggled,
+		this, &MainWindow::_OnToggleNotifications);
+
 	fShowHostColumnAction = viewMenu->addAction(tr("Show &host column"));
 	fShowHostColumnAction->setCheckable(true);
 	fShowHostColumnAction->setChecked(false);
@@ -515,6 +527,7 @@ MainWindow::_LoadSettings()
 	(void) fSettings.GetRawMessage().FindBool(kSettingsFieldShowHostColumn,
 		showHostColumn);
 	fFileSharingAction->setChecked(fSettings.GetFileSharingEnabled());
+	fNotificationsAction->setChecked(fSettings.GetNotificationsEnabled());
 	fShowHostColumnAction->setChecked(showHostColumn);
 	fUserListView->setColumnHidden(UserListModel::COLUMN_HOST,
 		showHostColumn == false);
@@ -628,6 +641,7 @@ void
 MainWindow::ChatMessageReceived(const ChatMessage& message)
 {
 	fChatLogView->AppendChatMessage(message);
+	_MaybeNotifyAboutChat(message);
 }
 
 
@@ -707,6 +721,16 @@ void
 MainWindow::DownloadReport(LogMessageType type, const String& text)
 {
 	_AppendLocalLine(type, ToQString(text));
+
+	// A finished download is the one transfer event worth interrupting for:
+	// it is what the user was waiting on, and it is not self-announcing the way
+	// a chat line in a visible window is.
+	if (type == LOG_INFORMATION_MESSAGE && fNotifier != nullptr
+			&& _UserIsLookingAtUs() == false
+			&& ToQString(text).startsWith(QLatin1String("Finished downloading"))) {
+		fNotifier->Notify(DesktopNotifier::CATEGORY_TRANSFER,
+			tr("Download finished"), ToQString(text));
+	}
 }
 
 
@@ -818,6 +842,20 @@ MainWindow::_DrainShareScanner()
 
 
 // #pragma mark - Slots
+
+
+void
+MainWindow::_OnToggleNotifications(bool enabled)
+{
+	fSettings.SetNotificationsEnabled(enabled);
+	fNotifier->SetEnabled(enabled);
+
+	if (enabled && fNotifier->IsAvailable() == false) {
+		_AppendLocalLine(LOG_WARNING_MESSAGE,
+			tr("No notification service is running on this desktop, so nothing"
+				" will appear."));
+	}
+}
 
 
 void
@@ -1433,6 +1471,71 @@ MainWindow::_GetCompletionCandidates(const QString& prefix) const
 
 	candidates.sort(Qt::CaseInsensitive);
 	return candidates;
+}
+
+
+bool
+MainWindow::_MentionsLocalUser(const muscle::String& text) const
+{
+	const QString localName = ToQString(fConnection.GetLocalUserName()).trimmed();
+	if (localName.isEmpty())
+		return false;
+
+	const QString haystack = ToQString(text);
+	int index = haystack.indexOf(localName, 0, Qt::CaseInsensitive);
+	while (index >= 0) {
+		// Require the match to stand alone, so somebody called "sam" is not
+		// notified by every mention of "same".
+		const bool startsCleanly = (index == 0)
+			|| haystack.at(index - 1).isLetterOrNumber() == false;
+		const int after = index + localName.length();
+		const bool endsCleanly = (after >= haystack.length())
+			|| haystack.at(after).isLetterOrNumber() == false;
+
+		if (startsCleanly && endsCleanly)
+			return true;
+
+		index = haystack.indexOf(localName, index + 1, Qt::CaseInsensitive);
+	}
+
+	return false;
+}
+
+
+bool
+MainWindow::_UserIsLookingAtUs() const
+{
+	// All three conditions, because "the window is focused" and "the user can
+	// see the window" are not the same question. A minimised window on some
+	// setups still reports as active, and notifying about a window nobody can
+	// see is the case a notification exists for.
+	return isActiveWindow() && isMinimized() == false && isVisible();
+}
+
+
+void
+MainWindow::_MaybeNotifyAboutChat(const ChatMessage& message)
+{
+	if (fNotifier == nullptr || message.isFromLocalUser)
+		return;
+
+	// Notifying about a window the user is already looking at is pure noise.
+	if (_UserIsLookingAtUs())
+		return;
+
+	if (message.type != LOG_REMOTE_USER_CHAT_MESSAGE)
+		return;
+
+	const QString sender = ToQString(message.senderName);
+
+	if (message.isPrivate) {
+		fNotifier->Notify(DesktopNotifier::CATEGORY_CHAT,
+			tr("Private message from %1").arg(sender),
+			ToQString(message.text));
+	} else if (_MentionsLocalUser(message.text)) {
+		fNotifier->Notify(DesktopNotifier::CATEGORY_CHAT,
+			tr("%1 mentioned you").arg(sender), ToQString(message.text));
+	}
 }
 
 

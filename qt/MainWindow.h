@@ -37,6 +37,7 @@ namespace hitux {
 
 class ChatInputLine;
 class ChatLogView;
+class DesktopNotifier;
 class FileResultModel;
 class UserListModel;
 
@@ -96,6 +97,7 @@ private slots:
 	void _OnQueryButtonClicked();
 	void _OnQueryFieldReturnPressed();
 	void _OnFlushPendingResults();
+	void _OnToggleNotifications(bool enabled);
 	void _OnChooseShareFolder();
 	void _OnToggleFileSharing(bool enabled);
 	void _OnShowAbout();
@@ -130,6 +132,9 @@ private:
 	QStringList _GetCompletionCandidates(const QString& prefix) const;
 
 	void _AppendLocalLine(LogMessageType type, const QString& text);
+	void _MaybeNotifyAboutChat(const ChatMessage& message);
+	bool _MentionsLocalUser(const muscle::String& text) const;
+	bool _UserIsLookingAtUs() const;
 
 	// Declared before fConnection so that the connection -- which registers with it
 	// from MUSCLE's internal thread -- is destroyed first.
@@ -169,6 +174,8 @@ private:
 	QAction* fShowTimestampsAction;
 	QAction* fShowHostColumnAction;
 	QAction* fFileSharingAction;
+	QAction* fNotificationsAction;
+	DesktopNotifier* fNotifier;
 
 	QTimer* fIdleTimer;
 

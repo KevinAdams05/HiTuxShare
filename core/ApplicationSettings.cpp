@@ -33,6 +33,7 @@ const char* const kFieldServerAddress = "server";
 const char* const kFieldServerPort = "serverport";
 const char* const kFieldInstallId = "installid";
 const char* const kFieldConnectOnStartup = "connectonstartup";
+const char* const kFieldNotificationsEnabled = "notifications";
 const char* const kFieldDownloadDirectory = "downloaddir";
 const char* const kFieldRetainFilePaths = "retainfilepaths";
 const char* const kFieldShareDirectory = "sharedir";
@@ -349,6 +350,23 @@ void
 ApplicationSettings::SetRetainFilePaths(bool retainFilePaths)
 {
 	(void) fSettings.ReplaceBool(true, kFieldRetainFilePaths, retainFilePaths);
+}
+
+
+bool
+ApplicationSettings::GetNotificationsEnabled() const
+{
+	bool notificationsEnabled = true;
+	(void) fSettings.FindBool(kFieldNotificationsEnabled, notificationsEnabled);
+	return notificationsEnabled;
+}
+
+
+void
+ApplicationSettings::SetNotificationsEnabled(bool notificationsEnabled)
+{
+	(void) fSettings.ReplaceBool(true, kFieldNotificationsEnabled,
+		notificationsEnabled);
 }
 
 

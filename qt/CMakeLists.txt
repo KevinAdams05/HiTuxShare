@@ -3,7 +3,7 @@
 # Everything Qt-specific lives here.  The network and protocol code is in
 # libhitux-core and knows nothing about widgets -- see core/CMakeLists.txt.
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets DBus)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
@@ -11,6 +11,7 @@ set(CMAKE_AUTORCC ON)
 add_executable(hitux
     ChatInputLine.cpp
     ChatLogView.cpp
+    DesktopNotifier.cpp
     FileResultModel.cpp
     MainWindow.cpp
     TransferModel.cpp
@@ -23,6 +24,7 @@ target_link_libraries(hitux
     PRIVATE
         hitux-core
         Qt6::Widgets
+        Qt6::DBus
 )
 
 target_compile_options(hitux PRIVATE -Wall -Wextra -Wno-multichar)

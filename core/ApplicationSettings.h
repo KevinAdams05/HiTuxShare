@@ -104,6 +104,13 @@ public:
 	bool GetRetainFilePaths() const;
 	void SetRetainFilePaths(bool retainFilePaths);
 
+	/** Whether to raise desktop notifications for private messages, mentions of
+	  * your name, and finished downloads. On by default; only ever fires when
+	  * the window is not the active one.
+	  */
+	bool GetNotificationsEnabled() const;
+	void SetNotificationsEnabled(bool notificationsEnabled);
+
 	bool GetConnectOnStartup() const;
 	void SetConnectOnStartup(bool connectOnStartup);
 
