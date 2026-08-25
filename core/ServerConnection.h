@@ -8,6 +8,7 @@
 
 #include "core/BeShareProtocol.h"
 #include "core/ServerConnectionListener.h"
+#include "core/ShareScanner.h"
 #include "core/UserRegistry.h"
 
 #include "regex/StringMatcher.h"
@@ -121,6 +122,49 @@ public:
 	  */
 	bool GetFirewalled() const { return fFirewalled; }
 
+	/** Sets whether we can accept incoming peer connections.
+	  *
+	  * Changes which node path our files are published under, so it re-publishes
+	  * the share if one is up. A firewalled peer publishes to "beshare/fires/"
+	  * and downloaders read that single letter to know they must ask us to
+	  * connect back to them instead.
+	  *
+	  * @param firewalled true iff we cannot accept incoming connections
+	  */
+	void SetFirewalled(bool firewalled);
+
+	/** Sets the port we tell other clients to reach us on.
+	  *
+	  * Re-publishes the name node, since that is where peers read it. Zero means
+	  * we accept no connections, which is what we advertise until Phase 3's
+	  * listener is up.
+	  *
+	  * @param port the port peers should connect to
+	  */
+	void SetAdvertisedPort(int32 port);
+
+	int32 GetAdvertisedPort() const { return fAdvertisedPort; }
+
+	/** Publishes a batch of shared files.
+	  *
+	  * Batched rather than one message per file: a share of several thousand
+	  * files would otherwise be several thousand round trips, and BeShare's own
+	  * client batches for the same reason.
+	  *
+	  * @param files the files to offer
+	  */
+	void PublishSharedFiles(const muscle::Queue<SharedFile>& files);
+
+	/** Removes every file we have published, e.g. when sharing is turned off. */
+	void UnpublishAllSharedFiles();
+
+	/** Publishes how many files we are sharing, which peers show in a column.
+	  * @param fileCount the number to advertise
+	  */
+	void PublishSharedFileCount(uint32 fileCount);
+
+	uint32 GetPublishedFileCount() const { return fPublishedFileCount; }
+
 	/** Housekeeping the connection cannot do for itself.
 	  *
 	  * The core owns no timer -- that would drag in a toolkit or a thread -- so the
@@ -152,6 +196,7 @@ private:
 	void _HandleParameters(const muscle::Message& message);
 
 	void _PublishLocalUserName();
+	const char* _GetFilesNodePath() const;
 	void _PublishLocalUserStatus();
 	void _SubscribeToUsers();
 	void _RequestSessionParameters();
@@ -190,6 +235,12 @@ private:
 	int32 fPingCount;
 
 	bool fFirewalled;
+
+	// The port we advertise to peers. Zero means "I accept no connections",
+	// which is both true and the correct thing to say until we are listening.
+	int32 fAdvertisedPort;
+
+	uint32 fPublishedFileCount;
 
 	// When we last put anything on the wire, for the keepalive in PerformIdleTasks().
 	uint64 fLastTrafficTime;

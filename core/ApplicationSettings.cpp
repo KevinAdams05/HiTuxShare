@@ -35,6 +35,8 @@ const char* const kFieldInstallId = "installid";
 const char* const kFieldConnectOnStartup = "connectonstartup";
 const char* const kFieldDownloadDirectory = "downloaddir";
 const char* const kFieldRetainFilePaths = "retainfilepaths";
+const char* const kFieldShareDirectory = "sharedir";
+const char* const kFieldFileSharingEnabled = "sharingenabled";
 
 // Named to match HiShare's own settings key, so the two files stay legible to
 // anyone reading both.
@@ -300,6 +302,37 @@ void
 ApplicationSettings::SetDownloadDirectory(const String& downloadDirectory)
 {
 	_SetString(kFieldDownloadDirectory, downloadDirectory);
+}
+
+
+String
+ApplicationSettings::GetShareDirectory() const
+{
+	return _GetString(kFieldShareDirectory, GetDefaultShareDirectoryPath());
+}
+
+
+void
+ApplicationSettings::SetShareDirectory(const String& shareDirectory)
+{
+	_SetString(kFieldShareDirectory, shareDirectory);
+}
+
+
+bool
+ApplicationSettings::GetFileSharingEnabled() const
+{
+	bool fileSharingEnabled = false;
+	(void) fSettings.FindBool(kFieldFileSharingEnabled, fileSharingEnabled);
+	return fileSharingEnabled;
+}
+
+
+void
+ApplicationSettings::SetFileSharingEnabled(bool fileSharingEnabled)
+{
+	(void) fSettings.ReplaceBool(true, kFieldFileSharingEnabled,
+		fileSharingEnabled);
 }
 
 

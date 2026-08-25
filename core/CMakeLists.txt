@@ -9,7 +9,10 @@ add_library(hitux-core STATIC
     ChatCommandParser.cpp
     DownloadManager.cpp
     FileDownload.cpp
+    FileUploadServer.cpp
     FormatUtilities.cpp
+    MimeTypeGuesser.cpp
+    ShareScanner.cpp
     ServerConnection.cpp
     UserRegistry.cpp
 )

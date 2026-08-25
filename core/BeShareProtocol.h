@@ -26,6 +26,11 @@ const uint16 kDefaultServerPort = 2960;
 const uint16 kDefaultTransferPort = 7000;
 const uint16 kTransferPortRange = 50;
 
+// Shared-file nodes published per PR_COMMAND_SETDATA. A share of several
+// thousand files would otherwise be several thousand round trips; BeShare's own
+// client batches for the same reason.
+const uint32 kSharedFileBatchSize = 50;
+
 // How many bytes of a partial download get hashed to validate a resume.
 const uint32 kPartialHashByteCount = 64 * 1024;
 

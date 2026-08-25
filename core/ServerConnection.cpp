@@ -32,6 +32,8 @@ ServerConnection::ServerConnection(ICallbackMechanism* callbackMechanism)
 	fQueryActive(false),
 	fPingCount(0),
 	fFirewalled(false),
+	fAdvertisedPort(0),
+	fPublishedFileCount(0),
 	fLastTrafficTime(0),
 	fLoginTime(0),
 	fHasPublishedIdentity(false)
@@ -250,6 +252,123 @@ ServerConnection::StopQuery()
 		fListener->QueryResultsCleared();
 		fListener->QuerySweepStateChanged(false);
 	}
+}
+
+
+void
+ServerConnection::SetFirewalled(bool firewalled)
+{
+	if (firewalled == fFirewalled)
+		return;
+
+	fFirewalled = firewalled;
+
+	// The node path changes with this flag, so anything already published is
+	// now under the wrong one.
+	if (IsConnected() && fPublishedFileCount > 0)
+		UnpublishAllSharedFiles();
+}
+
+
+void
+ServerConnection::SetAdvertisedPort(int32 port)
+{
+	if (port == fAdvertisedPort)
+		return;
+
+	fAdvertisedPort = port;
+	if (IsConnected())
+		_PublishLocalUserName();
+}
+
+
+const char*
+ServerConnection::_GetFilesNodePath() const
+{
+	return fFirewalled ? BESHARE_NODE_FIREWALLED_PATH : BESHARE_NODE_FILES_PATH;
+}
+
+
+void
+ServerConnection::PublishSharedFiles(const Queue<SharedFile>& files)
+{
+	if (IsConnected() == false || files.IsEmpty())
+		return;
+
+	const char* filesNodePath = _GetFilesNodePath();
+
+	MessageRef batch;
+	uint32 batchCount = 0;
+
+	for (uint32 i = 0; i < files.GetNumItems(); i++) {
+		const SharedFile& file = files[i];
+
+		MessageRef fileInfo = GetMessageFromPool();
+		if (fileInfo() == NULL)
+			continue;
+
+		(void) fileInfo()->AddInt64(BESHARE_FIELD_FILE_SIZE, file.fileSize);
+		(void) fileInfo()->AddInt32(BESHARE_FIELD_MODIFICATION_TIME,
+			file.modificationTime);
+		(void) fileInfo()->AddString(BESHARE_FIELD_PATH, file.relativePath);
+		if (file.kind.HasChars())
+			(void) fileInfo()->AddString(BESHARE_FIELD_KIND, file.kind);
+
+		if (batch() == NULL) {
+			batch = GetMessageFromPool(PR_COMMAND_SETDATA);
+			if (batch() == NULL)
+				return;
+
+			batchCount = 0;
+		}
+
+		(void) batch()->AddMessage(String(filesNodePath) + file.fileName,
+			fileInfo);
+		batchCount++;
+		fPublishedFileCount++;
+
+		if (batchCount >= kSharedFileBatchSize) {
+			_SendToServer(batch);
+			batch.Reset();
+		}
+	}
+
+	if (batch() != NULL)
+		_SendToServer(batch);
+}
+
+
+void
+ServerConnection::UnpublishAllSharedFiles()
+{
+	fPublishedFileCount = 0;
+
+	if (IsConnected() == false)
+		return;
+
+	MessageRef removeMessage = GetMessageFromPool(PR_COMMAND_REMOVEDATA);
+	if (removeMessage() == NULL)
+		return;
+
+	// "beshare/fi*es" covers both "files" and "fires", so a share published
+	// before the firewall flag changed is cleaned up too.
+	(void) removeMessage()->AddString(PR_NAME_KEYS, "beshare/fi*es");
+	_SendToServer(removeMessage);
+}
+
+
+void
+ServerConnection::PublishSharedFileCount(uint32 fileCount)
+{
+	if (IsConnected() == false)
+		return;
+
+	MessageRef countNode = GetMessageFromPool();
+	if (countNode() == NULL)
+		return;
+
+	(void) countNode()->AddInt32(BESHARE_FIELD_FILE_COUNT, (int32) fileCount);
+	_SetDataNodeValue(BESHARE_NODE_FILE_COUNT, countNode);
 }
 
 
@@ -763,9 +882,9 @@ ServerConnection::_PublishLocalUserName()
 
 	(void) nameNode()->AddString(BESHARE_FIELD_NAME, fLocalUserName);
 
-	// We accept no incoming transfers yet, and port 0 is how that is advertised.
-	// Phase 3 replaces this with the real listening port.
-	(void) nameNode()->AddInt32(BESHARE_FIELD_PORT, 0);
+	// Zero until we are actually listening, which is exactly what it means to a
+	// peer: "do not try to connect to me".
+	(void) nameNode()->AddInt32(BESHARE_FIELD_PORT, fAdvertisedPort);
 	(void) nameNode()->AddInt64(BESHARE_FIELD_INSTALL_ID, (int64) fInstallId);
 	(void) nameNode()->AddString(BESHARE_FIELD_VERSION_NAME, HITUX_SHARE_NAME);
 	(void) nameNode()->AddString(BESHARE_FIELD_VERSION_NUMBER,

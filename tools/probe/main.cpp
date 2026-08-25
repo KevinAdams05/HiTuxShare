@@ -9,6 +9,8 @@
 #include "core/FormatUtilities.h"
 #include "core/HiTuxShareVersion.h"
 #include "core/ServerConnection.h"
+#include "core/FileUploadServer.h"
+#include "core/ShareScanner.h"
 
 #include "dataio/StdinDataIO.h"
 #include "iogateway/PlainTextMessageIOGateway.h"
@@ -32,12 +34,15 @@ namespace {
   * show what actually arrived, so that the GUI can be compared against it.
   */
 class ProbeListener : public ServerConnectionListener,
-	public FileDownloadListener
+	public FileDownloadListener, public FileUploadServerListener
 {
 public:
 	ProbeListener()
 		:
 		fUsers(NULL),
+		fScanner(NULL),
+		fShouldStartScan(false),
+		fLastUploadCount(0),
 		fResultCount(0),
 		fLastProgressTenths(-1),
 		fShouldQuit(false)
@@ -68,9 +73,14 @@ public:
 		fflush(stdout);
 	}
 
+	void SetScanner(ShareScanner* scanner) { fScanner = scanner; }
+	bool ShouldStartScan() const { return fShouldStartScan; }
+	void ClearStartScan() { fShouldStartScan = false; }
+
 	virtual void LocalSessionIdAssigned(const String& sessionId,
 		const String& /*hostName*/)
 	{
+		fShouldStartScan = true;
 		// Deliberately not printing the hostName the server reports: that is the
 		// address the server sees US at, i.e. this machine's public IP, and probe
 		// output is exactly the sort of thing that gets pasted into a bug report.
@@ -218,6 +228,23 @@ public:
 		fflush(stdout);
 	}
 
+	// FileUploadServerListener
+	virtual void UploadsChanged(FileUploadServer* server)
+	{
+		const uint32 count = server->GetActiveUploadCount();
+		if (count != fLastUploadCount) {
+			fLastUploadCount = count;
+			printf("*** %u peer(s) connected to us.\n", (unsigned) count);
+			fflush(stdout);
+		}
+	}
+
+	virtual void UploadReport(LogMessageType /*type*/, const String& text)
+	{
+		printf("*** %s\n", text());
+		fflush(stdout);
+	}
+
 	virtual void PingReplyReceived(const UserRecord& user,
 		uint64 roundTripMicroseconds, const String& peerVersion)
 	{
@@ -230,6 +257,9 @@ public:
 
 private:
 	const UserRegistry* fUsers;
+	ShareScanner* fScanner;
+	bool fShouldStartScan;
+	uint32 fLastUploadCount;
 	Queue<FileResult> fResults;
 	uint32 fResultCount;
 	int fLastProgressTenths;
@@ -490,14 +520,24 @@ main(int argc, char** argv)
 	const bool retainFilePaths = settings.GetRetainFilePaths();
 	printf("Downloads go to %s\n", downloadDirectory());
 
+	const String shareDirectory = settings.GetFileSharingEnabled()
+		? settings.GetShareDirectory() : String();
+	if (shareDirectory.HasChars())
+		printf("Sharing from %s\n", shareDirectory());
+
 	SocketCallbackMechanism callbackMechanism;
 	Queue<FileDownload*> downloads;
+	ShareScanner scanner;
+	FileUploadServer uploadServer(&callbackMechanism);
+	Hashtable<String, SharedFile> sharedFiles;
+	uint32 sharedSoFar = 0;
 
 	ProbeListener listener;
 	ServerConnection connection(&callbackMechanism);
 	connection.SetListener(&listener);
 	connection.SetInstallId(settings.GetInstallId());
 	listener.SetUserRegistry(&connection.GetUsers());
+	uploadServer.SetListener(&listener);
 	connection.SetLocalUserName(userName);
 	connection.SetLocalUserStatus(settings.GetUserStatus());
 
@@ -548,6 +588,54 @@ main(int argc, char** argv)
 		}
 
 		connection.PerformIdleTasks();
+
+		if (listener.ShouldStartScan() && shareDirectory.HasChars()) {
+			listener.ClearStartScan();
+
+			// Listen before publishing: a peer that reads our file list and
+			// connects back before we are accepting would just get refused.
+			const uint16 listenPort = uploadServer.StartListening(
+				kDefaultTransferPort, kTransferPortRange);
+			if (listenPort > 0) {
+				printf("*** Accepting downloads on port %u\n",
+					(unsigned) listenPort);
+				uploadServer.SetLocalIdentity(connection.GetLocalSessionId(),
+					connection.GetLocalUserName());
+				connection.SetAdvertisedPort(listenPort);
+			} else {
+				printf("*** Could not listen on any port; sharing read-only.\n");
+			}
+
+			printf("*** Sharing %s\n", shareDirectory());
+			scanner.SetShareDirectory(shareDirectory);
+			scanner.StartScan();
+		}
+
+		// Publishing happens here rather than on the scanning thread: the
+		// connection is not thread-safe, and the scan is deliberately allowed
+		// to run ahead of the network.
+		const Queue<SharedFile> discovered = scanner.TakeDiscoveredFiles();
+		if (discovered.HasItems()) {
+			connection.PublishSharedFiles(discovered);
+			for (uint32 i = 0; i < discovered.GetNumItems(); i++)
+				(void) sharedFiles.Put(discovered[i].fileName, discovered[i]);
+
+			uploadServer.SetSharedFiles(sharedFiles);
+			sharedSoFar += discovered.GetNumItems();
+		}
+
+		if (scanner.TakeScanFinished()) {
+			connection.PublishSharedFileCount(sharedSoFar);
+			printf("*** Sharing %u file(s)", (unsigned) sharedSoFar);
+			const uint32 duplicates = scanner.GetDuplicateNameCount();
+			if (duplicates > 0) {
+				printf("; %u skipped for having a name another file already"
+					" used", (unsigned) duplicates);
+			}
+
+			printf(".\n");
+			fflush(stdout);
+		}
 	}
 
 	connection.DisconnectFromServer();

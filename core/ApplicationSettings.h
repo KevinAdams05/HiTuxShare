@@ -89,6 +89,18 @@ public:
 	  * file the user asked for is a worse default than putting it where they
 	  * can see it. BeShare has the same switch.
 	  */
+	/** The folder whose contents we offer to other people.
+	  *
+	  * Defaults to ~/HiTuxShare/shared, deliberately not any existing folder:
+	  * sharing is opt-in and it should be obvious which files are exposed.
+	  */
+	muscle::String GetShareDirectory() const;
+	void SetShareDirectory(const muscle::String& shareDirectory);
+
+	/** Whether to publish the share folder at all. Off until asked. */
+	bool GetFileSharingEnabled() const;
+	void SetFileSharingEnabled(bool fileSharingEnabled);
+
 	bool GetRetainFilePaths() const;
 	void SetRetainFilePaths(bool retainFilePaths);
 
