@@ -85,6 +85,19 @@ public:
 
 	void SetListener(FileDownloadListener* listener) { fListener = listener; }
 
+	/** Sets the name to show for the peer before they introduce themselves.
+	  *
+	  * Not every client sends TRANSFER_COMMAND_PEER_ID, and one that does may
+	  * send it after the transfer is under way, so seeding this from the user
+	  * list keeps the transfer row from reading as a bare session ID.
+	  *
+	  * @param remoteUserName the peer's name as the server knows it
+	  */
+	void SetRemoteUserName(const muscle::String& remoteUserName)
+	{
+		fRemoteUserName = remoteUserName;
+	}
+
 	/** Whether to recreate the sharer's sub-path under the download directory.
 	  * @param retainFilePaths true to rebuild their directory structure
 	  */

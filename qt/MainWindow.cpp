@@ -12,6 +12,7 @@
 #include "qt/ChatLogView.h"
 #include "qt/FileResultModel.h"
 #include "qt/QtConversions.h"
+#include "qt/TransferModel.h"
 #include "qt/UserListModel.h"
 
 #include <QAction>
@@ -99,6 +100,9 @@ MainWindow::MainWindow(QWidget* parent)
 	fQueryButton(nullptr),
 	fResultCountLabel(nullptr),
 	fLeftSplitter(nullptr),
+	fTransfersView(nullptr),
+	fTransferModel(nullptr),
+	fDownloadButton(nullptr),
 	fChatInputLine(nullptr),
 	fUserListView(nullptr),
 	fUserListModel(nullptr),
@@ -116,7 +120,8 @@ MainWindow::MainWindow(QWidget* parent)
 	fShowHostColumnAction(nullptr),
 	fIdleTimer(nullptr),
 	fResultFlushTimer(nullptr),
-	fUserNamesDirty(false)
+	fUserNamesDirty(false),
+	fDownloads(&fCallbackMechanism)
 {
 	(void) fSettings.Load();
 
@@ -143,6 +148,10 @@ MainWindow::MainWindow(QWidget* parent)
 		this, &MainWindow::_OnFlushPendingResults);
 
 	fResultsModel->SetUserRegistry(&fConnection.GetUsers());
+
+	fDownloads.SetListener(this);
+	fDownloads.SetDownloadDirectory(fSettings.GetDownloadDirectory());
+	fDownloads.SetRetainFilePaths(fSettings.GetRetainFilePaths());
 
 	_UpdateConnectionWidgets();
 	_UpdateQueryWidgets();
@@ -273,6 +282,64 @@ MainWindow::_BuildUserInterface()
 	resultsLayout->addWidget(fResultsView, 1);
 	fLeftSplitter->addWidget(resultsContainer);
 
+	// Download button strip under the results.
+	QHBoxLayout* resultActionLayout = new QHBoxLayout();
+	fDownloadButton = new QPushButton(tr("Download Selected"), resultsContainer);
+	fDownloadButton->setAutoDefault(false);
+	fDownloadButton->setEnabled(false);
+	connect(fDownloadButton, &QPushButton::clicked,
+		this, &MainWindow::_OnDownloadSelected);
+	resultActionLayout->addWidget(fDownloadButton);
+	resultActionLayout->addStretch(1);
+	resultsLayout->addLayout(resultActionLayout);
+
+	connect(fResultsView, &QTreeView::doubleClicked,
+		this, &MainWindow::_OnResultsDoubleClicked);
+	connect(fResultsView->selectionModel(), &QItemSelectionModel::selectionChanged,
+		this, [this]() {
+			fDownloadButton->setEnabled(
+				fResultsView->selectionModel()->hasSelection());
+		});
+
+	QWidget* transfersContainer = new QWidget(fLeftSplitter);
+	QVBoxLayout* transfersLayout = new QVBoxLayout(transfersContainer);
+	transfersLayout->setContentsMargins(0, 0, 0, 0);
+	transfersLayout->setSpacing(4);
+
+	fTransferModel = new TransferModel(&fDownloads, this);
+
+	fTransfersView = new QTreeView(transfersContainer);
+	fTransfersView->setModel(fTransferModel);
+	fTransfersView->setRootIsDecorated(false);
+	fTransfersView->setAlternatingRowColors(true);
+	fTransfersView->setSelectionBehavior(QAbstractItemView::SelectRows);
+	fTransfersView->setUniformRowHeights(true);
+	fTransfersView->setItemDelegateForColumn(TransferModel::COLUMN_PROGRESS,
+		new TransferProgressDelegate(this));
+	fTransfersView->header()->setStretchLastSection(true);
+	fTransfersView->header()->setSectionResizeMode(TransferModel::COLUMN_FILE,
+		QHeaderView::Stretch);
+	fTransfersView->setColumnWidth(TransferModel::COLUMN_PROGRESS, 110);
+	transfersLayout->addWidget(fTransfersView, 1);
+
+	QHBoxLayout* transferActionLayout = new QHBoxLayout();
+	QPushButton* cancelButton = new QPushButton(tr("Cancel"), transfersContainer);
+	cancelButton->setAutoDefault(false);
+	connect(cancelButton, &QPushButton::clicked,
+		this, &MainWindow::_OnCancelSelectedTransfer);
+	transferActionLayout->addWidget(cancelButton);
+
+	QPushButton* clearButton = new QPushButton(tr("Clear Finished"),
+		transfersContainer);
+	clearButton->setAutoDefault(false);
+	connect(clearButton, &QPushButton::clicked,
+		this, &MainWindow::_OnClearFinishedTransfers);
+	transferActionLayout->addWidget(clearButton);
+	transferActionLayout->addStretch(1);
+	transfersLayout->addLayout(transferActionLayout);
+
+	fLeftSplitter->addWidget(transfersContainer);
+
 	QWidget* chatContainer = new QWidget(fLeftSplitter);
 	QVBoxLayout* chatLayout = new QVBoxLayout(chatContainer);
 	chatLayout->setContentsMargins(0, 0, 0, 0);
@@ -290,9 +357,10 @@ MainWindow::_BuildUserInterface()
 	chatLayout->addWidget(fChatInputLine);
 
 	fLeftSplitter->addWidget(chatContainer);
-	fLeftSplitter->setStretchFactor(0, 3);
-	fLeftSplitter->setStretchFactor(1, 2);
-	fLeftSplitter->setSizes({360, 240});
+	fLeftSplitter->setStretchFactor(0, 4);
+	fLeftSplitter->setStretchFactor(1, 1);
+	fLeftSplitter->setStretchFactor(2, 2);
+	fLeftSplitter->setSizes({380, 140, 220});
 
 	fSplitter->addWidget(fLeftSplitter);
 
@@ -594,7 +662,62 @@ MainWindow::QuerySweepStateChanged(bool isSweeping)
 }
 
 
+// #pragma mark - DownloadManagerListener
+
+
+void
+MainWindow::DownloadListChanged()
+{
+	fTransferModel->NotifyListChanged();
+}
+
+
+void
+MainWindow::DownloadChanged(uint32 index)
+{
+	fTransferModel->NotifyRowChanged(index);
+}
+
+
+void
+MainWindow::DownloadReport(LogMessageType type, const String& text)
+{
+	_AppendLocalLine(type, ToQString(text));
+}
+
+
 // #pragma mark - Slots
+
+
+void
+MainWindow::_OnDownloadSelected()
+{
+	_DownloadSelectedResults();
+}
+
+
+void
+MainWindow::_OnResultsDoubleClicked(const QModelIndex& /*index*/)
+{
+	_DownloadSelectedResults();
+}
+
+
+void
+MainWindow::_OnClearFinishedTransfers()
+{
+	fDownloads.ClearFinishedDownloads();
+}
+
+
+void
+MainWindow::_OnCancelSelectedTransfer()
+{
+	const QModelIndexList selected
+		= fTransfersView->selectionModel()->selectedRows();
+	for (const QModelIndex& index : selected)
+		fDownloads.AbortDownload((uint32) index.row());
+}
 
 
 void
@@ -790,6 +913,10 @@ MainWindow::_HandleUserInput(const QString& input)
 		case CHAT_COMMAND_STOP_QUERY:
 			fConnection.StopQuery();
 			_UpdateQueryWidgets();
+			break;
+
+		case CHAT_COMMAND_GET:
+			_DownloadSelectedResults();
 			break;
 
 		case CHAT_COMMAND_CLEAR:
@@ -1007,6 +1134,37 @@ MainWindow::_StartQuery()
 
 
 void
+MainWindow::_DownloadSelectedResults()
+{
+	const QModelIndexList selected
+		= fResultsView->selectionModel()->selectedRows();
+	if (selected.isEmpty()) {
+		_AppendLocalLine(LOG_WARNING_MESSAGE,
+			tr("Select something in the results list first."));
+		return;
+	}
+
+	Queue<FileResult> chosen;
+	for (const QModelIndex& proxyIndex : selected) {
+		const QModelIndex sourceIndex
+			= fResultsProxyModel->mapToSource(proxyIndex);
+		const FileResult* result
+			= fResultsModel->GetResultForRow(sourceIndex.row());
+		if (result != nullptr)
+			(void) chosen.AddTail(*result);
+	}
+
+	// Settings can have changed since construction, and a download that ignored
+	// the folder the user just chose would be its own bug report.
+	fDownloads.SetDownloadDirectory(fSettings.GetDownloadDirectory());
+	fDownloads.SetRetainFilePaths(fSettings.GetRetainFilePaths());
+
+	fDownloads.StartDownloads(chosen, fConnection.GetUsers(),
+		fConnection.GetLocalSessionId(), fConnection.GetLocalUserName());
+}
+
+
+void
 MainWindow::_UpdateQueryWidgets()
 {
 	const bool isActive = fConnection.IsQueryActive();
@@ -1104,6 +1262,8 @@ void
 MainWindow::closeEvent(QCloseEvent* event)
 {
 	_SaveSettings();
+	fDownloads.SetListener(nullptr);
+	fDownloads.AbortAll();
 	fConnection.SetListener(nullptr);
 	fConnection.DisconnectFromServer();
 

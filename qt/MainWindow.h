@@ -7,6 +7,7 @@
 
 
 #include "core/ApplicationSettings.h"
+#include "core/DownloadManager.h"
 #include "core/ServerConnection.h"
 #include "core/ServerConnectionListener.h"
 
@@ -45,7 +46,8 @@ class UserListModel;
   * on the GUI thread, so these methods may touch widgets without any locking -- that
   * is the whole reason MUSCLE's Qt integration is worth using.
   */
-class MainWindow : public QMainWindow, public ServerConnectionListener
+class MainWindow : public QMainWindow, public ServerConnectionListener,
+	public DownloadManagerListener
 {
 	Q_OBJECT
 
@@ -68,6 +70,11 @@ public:
 	void QueryResultsCleared() override;
 	void QuerySweepStateChanged(bool isSweeping) override;
 
+	// DownloadManagerListener
+	void DownloadListChanged() override;
+	void DownloadChanged(uint32 index) override;
+	void DownloadReport(LogMessageType type, const muscle::String& text) override;
+
 protected:
 	void closeEvent(QCloseEvent* event) override;
 
@@ -76,6 +83,10 @@ private slots:
 	void _OnInputReturnPressed();
 	void _OnUserDoubleClicked(const QModelIndex& index);
 	void _OnIdleTimerFired();
+	void _OnDownloadSelected();
+	void _OnClearFinishedTransfers();
+	void _OnCancelSelectedTransfer();
+	void _OnResultsDoubleClicked(const QModelIndex& index);
 	void _OnQueryButtonClicked();
 	void _OnQueryFieldReturnPressed();
 	void _OnFlushPendingResults();
@@ -97,6 +108,7 @@ private:
 
 	void _ConnectToConfiguredServer();
 	void _StartQuery();
+	void _DownloadSelectedResults();
 	void _UpdateQueryWidgets();
 	void _UpdateResultCount();
 	void _UpdateConnectionWidgets();
@@ -123,6 +135,9 @@ private:
 	QPushButton* fQueryButton;
 	QLabel* fResultCountLabel;
 	QSplitter* fLeftSplitter;
+	QTreeView* fTransfersView;
+	class TransferModel* fTransferModel;
+	QPushButton* fDownloadButton;
 	ChatInputLine* fChatInputLine;
 	QTreeView* fUserListView;
 	UserListModel* fUserListModel;
@@ -150,6 +165,9 @@ private:
 	QVector<FileResult> fPendingResults;
 	QTimer* fResultFlushTimer;
 	bool fUserNamesDirty;
+
+	// Declared last so it is destroyed first: its downloads call back into us.
+	DownloadManager fDownloads;
 };
 
 

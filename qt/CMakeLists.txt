@@ -13,6 +13,7 @@ add_executable(hitux
     ChatLogView.cpp
     FileResultModel.cpp
     MainWindow.cpp
+    TransferModel.cpp
     UserListModel.cpp
     main.cpp
     resources.qrc

@@ -244,9 +244,15 @@ FileDownload::MessageReceived(const MessageRef& messageRef,
 			break;
 
 		case TRANSFER_COMMAND_PEER_ID:
-			(void) message->FindString(BESHARE_FIELD_FROM_USER_NAME,
-				fRemoteUserName);
+		{
+			// Only overwrite the seeded name if they actually sent one.
+			String announcedName;
+			if (message->FindString(BESHARE_FIELD_FROM_USER_NAME,
+					announcedName).IsOK() && announcedName.HasChars()) {
+				fRemoteUserName = announcedName;
+			}
 			break;
+		}
 
 		case TRANSFER_COMMAND_NOTIFY_QUEUED:
 			// They have us on a waiting list rather than refusing us.
