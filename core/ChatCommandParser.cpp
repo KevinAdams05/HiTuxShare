@@ -34,6 +34,9 @@ const CommandTableEntry kCommandTable[] = {
 	{ "msg",        CHAT_COMMAND_MESSAGE,    true  },
 	{ "ping",       CHAT_COMMAND_PING,       true  },
 	{ "connect",    CHAT_COMMAND_CONNECT,    false },
+	{ "start",      CHAT_COMMAND_START_QUERY, false },
+	{ "query",      CHAT_COMMAND_START_QUERY, false },
+	{ "stop",       CHAT_COMMAND_STOP_QUERY, false },
 	{ "disconnect", CHAT_COMMAND_DISCONNECT, false },
 	{ "clear",      CHAT_COMMAND_CLEAR,      false },
 	{ "help",       CHAT_COMMAND_HELP,       false },
@@ -138,6 +141,8 @@ ChatCommandParser::GetHelpEntries()
 		{ "nick",       "<name>",        "Change your user name" },
 		{ "ping",       "<user>",        "Measure the round trip to another client" },
 		{ "quit",       NULL,            "Quit HiTuxShare" },
+		{ "start",      "<pattern>",     "Search shared files, e.g. /start *.hpkg" },
+		{ "stop",       NULL,            "Stop the running search" },
 		{ "status",     "<status>",      "Set your status string" }
 	};
 

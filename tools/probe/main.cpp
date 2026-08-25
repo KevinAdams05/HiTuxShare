@@ -5,6 +5,7 @@
 
 #include "core/ApplicationSettings.h"
 #include "core/ChatCommandParser.h"
+#include "core/FormatUtilities.h"
 #include "core/HiTuxShareVersion.h"
 #include "core/ServerConnection.h"
 
@@ -12,6 +13,7 @@
 #include "iogateway/PlainTextMessageIOGateway.h"
 #include "system/SetupSystem.h"
 #include "util/SocketCallbackMechanism.h"
+#include "util/MiscUtilityFunctions.h"
 #include "util/SocketMultiplexer.h"
 
 #include <stdio.h>
@@ -33,9 +35,13 @@ class ProbeListener : public ServerConnectionListener
 public:
 	ProbeListener()
 		:
+		fUsers(NULL),
+		fResultCount(0),
 		fShouldQuit(false)
 	{
 	}
+
+	void SetUserRegistry(const UserRegistry* users) { fUsers = users; }
 
 	bool ShouldQuit() const { return fShouldQuit; }
 	void RequestQuit() { fShouldQuit = true; }
@@ -59,9 +65,13 @@ public:
 		fflush(stdout);
 	}
 
-	virtual void LocalSessionIdAssigned(const String& sessionId, const String& hostName)
+	virtual void LocalSessionIdAssigned(const String& sessionId,
+		const String& /*hostName*/)
 	{
-		printf("*** We are session %s on %s.\n", sessionId(), hostName());
+		// Deliberately not printing the hostName the server reports: that is the
+		// address the server sees US at, i.e. this machine's public IP, and probe
+		// output is exactly the sort of thing that gets pasted into a bug report.
+		printf("*** We are session %s.\n", sessionId());
 		fflush(stdout);
 	}
 
@@ -99,6 +109,40 @@ public:
 		fflush(stdout);
 	}
 
+	virtual void QueryResultAdded(const FileResult& result)
+	{
+		printf("  %-40s %10s  %s%s\n", result.fileName(),
+			FormatByteSize(result.fileSize)(),
+			fUsers != NULL
+				? fUsers->GetDisplayNameForSession(result.sessionId)()
+				: result.sessionId(),
+			result.isFirewalled ? " [firewalled]" : "");
+		fflush(stdout);
+		fResultCount++;
+	}
+
+	virtual void QueryResultRemoved(const String& sessionId, const String& fileName)
+	{
+		printf("  -- %s (from %s) is no longer shared\n", fileName(), sessionId());
+		fflush(stdout);
+		if (fResultCount > 0)
+			fResultCount--;
+	}
+
+	virtual void QueryResultsCleared()
+	{
+		fResultCount = 0;
+	}
+
+	virtual void QuerySweepStateChanged(bool isSweeping)
+	{
+		printf(isSweeping
+			? "*** Searching...\n"
+			: "*** Search complete (%u result(s) so far; more arrive live).\n",
+			(unsigned) fResultCount);
+		fflush(stdout);
+	}
+
 	virtual void PingReplyReceived(const UserRecord& user,
 		uint64 roundTripMicroseconds, const String& peerVersion)
 	{
@@ -110,6 +154,8 @@ public:
 	}
 
 private:
+	const UserRegistry* fUsers;
+	uint32 fResultCount;
 	bool fShouldQuit;
 };
 
@@ -229,6 +275,21 @@ HandleUserInput(const String& line, ServerConnection& connection,
 			break;
 		}
 
+		case CHAT_COMMAND_START_QUERY:
+			if (connection.IsConnected() == false) {
+				printf("*** Not connected.\n");
+				break;
+			}
+
+			connection.StartQuery(String("*"), command.argument.HasChars()
+				? command.argument : String("*"));
+			break;
+
+		case CHAT_COMMAND_STOP_QUERY:
+			connection.StopQuery();
+			printf("*** Search stopped.\n");
+			break;
+
 		case CHAT_COMMAND_DISCONNECT:
 			connection.DisconnectFromServer();
 			break;
@@ -306,6 +367,7 @@ main(int argc, char** argv)
 	ServerConnection connection(&callbackMechanism);
 	connection.SetListener(&listener);
 	connection.SetInstallId(settings.GetInstallId());
+	listener.SetUserRegistry(&connection.GetUsers());
 	connection.SetLocalUserName(userName);
 	connection.SetLocalUserStatus(settings.GetUserStatus());
 

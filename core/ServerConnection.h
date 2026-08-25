@@ -10,6 +10,8 @@
 #include "core/ServerConnectionListener.h"
 #include "core/UserRegistry.h"
 
+#include "regex/StringMatcher.h"
+
 #include "system/CallbackMessageTransceiverThread.h"
 
 
@@ -95,6 +97,30 @@ public:
 
 	const UserRegistry& GetUsers() const { return fUsers; }
 
+	/** Starts a live file query, replacing any query already running.
+	  *
+	  * Results arrive through the listener and keep arriving as other users
+	  * share matching files -- there is nothing to refresh.
+	  *
+	  * @param sessionExpression which users to search; "*" for everyone
+	  * @param fileExpression a glob for the file name, e.g. "*.hpkg"
+	  */
+	void StartQuery(const muscle::String& sessionExpression,
+		const muscle::String& fileExpression);
+
+	/** Cancels the query and clears its results, server-side included. */
+	void StopQuery();
+
+	bool IsQueryActive() const { return fQueryActive; }
+
+	/** Whether we can accept incoming peer connections.
+	  *
+	  * Phase 2 downloads only, so this is always true for now: we do not listen
+	  * on a port yet, but we can still connect out. It exists because it changes
+	  * which nodes a query subscribes to.
+	  */
+	bool GetFirewalled() const { return fFirewalled; }
+
 	/** Housekeeping the connection cannot do for itself.
 	  *
 	  * The core owns no timer -- that would drag in a toolkit or a thread -- so the
@@ -115,6 +141,10 @@ private:
 	void _HandleDataItems(const muscle::Message& message);
 	void _HandleNodeUpdated(const muscle::String& nodePath,
 		const muscle::MessageRef& nodeData);
+	void _HandleUserNode(const muscle::String& sessionId,
+		const muscle::String& nodePath, const muscle::Message& nodeMessage);
+	void _HandleFileNode(const muscle::String& sessionId,
+		const muscle::String& nodePath, const muscle::MessageRef& nodeData);
 	void _HandleNodeRemoved(const muscle::String& nodePath);
 	void _HandleChatText(const muscle::Message& message);
 	void _HandlePing(const muscle::MessageRef& messageRef);
@@ -147,6 +177,19 @@ private:
 	uint16 fServerPort;
 
 	uint64 fInstallId;
+
+	// The server can still be delivering results from a subscription we have
+	// since replaced, so incoming results are re-checked against the criteria we
+	// currently care about rather than trusted because they arrived.
+	bool fQueryActive;
+	muscle::StringMatcher fSessionMatcher;
+	muscle::StringMatcher fFileNameMatcher;
+
+	// Ping round-trips are how a query learns its initial sweep is done: the
+	// server answers PR_COMMAND_PING only after it has sent everything it had.
+	int32 fPingCount;
+
+	bool fFirewalled;
 
 	// When we last put anything on the wire, for the keepalive in PerformIdleTasks().
 	uint64 fLastTrafficTime;

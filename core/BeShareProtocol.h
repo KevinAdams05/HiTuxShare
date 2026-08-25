@@ -106,6 +106,18 @@ enum
 #define BESHARE_FIELD_UPLOADS_CURRENT     "cur"
 #define BESHARE_FIELD_UPLOADS_MAX         "max"
 
+// Field names inside a shared-file node.  The space and capitalisation are part
+// of the wire format, not a style choice -- they date to BeOS attribute names.
+#define BESHARE_FIELD_FILE_SIZE           "beshare:File Size"
+#define BESHARE_FIELD_MODIFICATION_TIME   "beshare:Modification Time"
+#define BESHARE_FIELD_PATH                "beshare:Path"
+#define BESHARE_FIELD_KIND                "beshare:Kind"
+
+// Prefix marking a field that carries data but should not become a display
+// column, e.g. "besharez:Vector Icon".
+#define BESHARE_HIDDEN_FIELD_PREFIX       "besharez:"
+
+
 // Field names in chat and ping messages.
 #define BESHARE_FIELD_SESSION             "session"
 #define BESHARE_FIELD_TEXT                "text"
@@ -118,6 +130,30 @@ enum
 // Prefix that marks an action ("/me waves") inside an ordinary chat message.  There
 // is no separate 'what' code for actions -- the receiver looks for this prefix.
 #define BESHARE_ACTION_PREFIX  "/me "
+
+
+/** Builds the subscription path for a file query.
+  *
+  * (sessionExpression) and (fileExpression) are MUSCLE glob patterns, not
+  * regular expressions.  A firewalled client subscribes only to "files" because
+  * it cannot reach other firewalled peers anyway; everyone else uses "fi*" to
+  * match both "files" and "fires".
+  *
+  * @param sessionExpression which users to search, "*" for everyone
+  * @param fileExpression which file names to match
+  * @param isFirewalled true iff we cannot accept incoming connections
+  */
+inline muscle::String
+MakeQuerySubscriptionPath(const muscle::String& sessionExpression,
+	const muscle::String& fileExpression, bool isFirewalled)
+{
+	muscle::String path("SUBSCRIBE:/*/");
+	path += sessionExpression;
+	path += "/beshare/";
+	path += isFirewalled ? "files/" : "fi*/";
+	path += fileExpression;
+	return path;
+}
 
 
 /** Builds the PR_NAME_KEYS routing path that sends a message to one session, or to

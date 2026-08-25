@@ -9,7 +9,10 @@
 
 #include "reflector/StorageReflectConstants.h"
 #include "regex/PathMatcher.h"
+#include "zlib/ZLibUtilityFunctions.h"
 #include "util/TimeUtilityFunctions.h"
+
+#include <string.h>
 
 using namespace muscle;
 
@@ -26,6 +29,9 @@ ServerConnection::ServerConnection(ICallbackMechanism* callbackMechanism)
 	fLocalUserStatus("here"),
 	fServerPort(kDefaultServerPort),
 	fInstallId(0),
+	fQueryActive(false),
+	fPingCount(0),
+	fFirewalled(false),
 	fLastTrafficTime(0),
 	fLoginTime(0),
 	fHasPublishedIdentity(false)
@@ -86,6 +92,10 @@ ServerConnection::DisconnectFromServer()
 	fLocalSessionId.Clear();
 	fHasPublishedIdentity = false;
 	fLoginTime = 0;
+	fQueryActive = false;
+
+	if (fListener != NULL)
+		fListener->QueryResultsCleared();
 
 	if (wasActive) {
 		_ReportToUser(LOG_INFORMATION_MESSAGE, "Disconnected from server.");
@@ -167,6 +177,83 @@ ServerConnection::SendPing(const String& targetSessionId)
 
 
 void
+ServerConnection::StartQuery(const String& sessionExpression,
+	const String& fileExpression)
+{
+	if (IsConnected() == false)
+		return;
+
+	StopQuery();
+
+	const String subscription = MakeQuerySubscriptionPath(
+		sessionExpression.HasChars() ? sessionExpression : String("*"),
+		fileExpression.HasChars() ? fileExpression : String("*"),
+		fFirewalled);
+
+	MessageRef subscribeMessage = GetMessageFromPool(PR_COMMAND_SETPARAMETERS);
+	if (subscribeMessage() == NULL)
+		return;
+
+	(void) subscribeMessage()->AddBool(subscription, true);
+	_SendToServer(subscribeMessage);
+
+	// The server answers a ping only after it has sent everything it already
+	// held, so the reply is how we learn the initial sweep finished.  The count
+	// distinguishes this ping's reply from one belonging to an earlier query.
+	MessageRef pingMessage = GetMessageFromPool(PR_COMMAND_PING);
+	if (pingMessage() != NULL) {
+		(void) pingMessage()->AddInt32("count", fPingCount++);
+		_SendToServer(pingMessage);
+	}
+
+	fQueryActive = true;
+	fSessionMatcher.SetPattern(sessionExpression.HasChars()
+		? sessionExpression : String("*"));
+	fFileNameMatcher.SetPattern(fileExpression.HasChars()
+		? fileExpression : String("*"));
+
+	if (fListener != NULL)
+		fListener->QuerySweepStateChanged(true);
+}
+
+
+void
+ServerConnection::StopQuery()
+{
+	if (fQueryActive == false)
+		return;
+
+	fQueryActive = false;
+
+	if (IsConnected()) {
+		MessageRef removeMessage
+			= GetMessageFromPool(PR_COMMAND_REMOVEPARAMETERS);
+		if (removeMessage() != NULL) {
+			(void) removeMessage()->AddString(PR_NAME_KEYS,
+				"SUBSCRIBE:*beshare/fi*");
+			_SendToServer(removeMessage);
+		}
+
+		// Unsubscribing stops new results, but the server may already have a
+		// backlog queued for us.  Jettisoning it avoids a burst of results for
+		// a query the user has already cancelled.
+		MessageRef jettisonMessage
+			= GetMessageFromPool(PR_COMMAND_JETTISONRESULTS);
+		if (jettisonMessage() != NULL) {
+			(void) jettisonMessage()->AddString(PR_NAME_KEYS,
+				"beshare/fi*/*");
+			_SendToServer(jettisonMessage);
+		}
+	}
+
+	if (fListener != NULL) {
+		fListener->QueryResultsCleared();
+		fListener->QuerySweepStateChanged(false);
+	}
+}
+
+
+void
 ServerConnection::PerformIdleTasks()
 {
 	if (IsConnected() == false)
@@ -240,6 +327,19 @@ ServerConnection::MessageReceived(const MessageRef& messageRef,
 		case PR_RESULT_PARAMETERS:
 			_HandleParameters(*message);
 			break;
+
+		case PR_RESULT_PONG:
+		{
+			// Our own ping coming back means the server has finished sending
+			// the matches it already held.  Results keep arriving after this;
+			// only the initial sweep is over.
+			int32 count = 0;
+			if (message->FindInt32("count", count).IsOK()
+					&& count >= fPingCount - 1 && fListener != NULL) {
+				fListener->QuerySweepStateChanged(false);
+			}
+			break;
+		}
 
 		case NET_CLIENT_NEW_CHAT_TEXT:
 			_HandleChatText(*message);
@@ -315,6 +415,15 @@ ServerConnection::_HandleNodeRemoved(const String& nodePath)
 		isUserGone = (nodeNameClause != NULL && String(nodeNameClause).StartsWith("name"));
 	}
 
+	if (pathDepth == FILE_INFO_DEPTH) {
+		const char* fileNameClause = GetPathClause(FILE_INFO_DEPTH, nodePath());
+		const String sessionId = _ExtractSessionId(nodePath);
+		if (fileNameClause != NULL && sessionId.HasChars() && fListener != NULL)
+			fListener->QueryResultRemoved(sessionId, fileNameClause);
+
+		return;
+	}
+
 	if (isUserGone == false)
 		return;
 
@@ -334,21 +443,39 @@ ServerConnection::_HandleNodeRemoved(const String& nodePath)
 void
 ServerConnection::_HandleNodeUpdated(const String& nodePath, const MessageRef& nodeData)
 {
-	if (GetPathDepth(nodePath()) < USER_NAME_DEPTH)
+	const int pathDepth = GetPathDepth(nodePath());
+	if (pathDepth < USER_NAME_DEPTH)
 		return;
 
 	const String sessionId = _ExtractSessionId(nodePath);
 	if (sessionId.IsEmpty())
 		return;
 
-	// Our own published nodes come back to us through the subscription.  Skipping them
-	// keeps us out of our own user list.
-	if (sessionId == fLocalSessionId)
-		return;
-
 	const Message* nodeMessage = nodeData();
 	if (nodeMessage == NULL)
 		return;
+
+	if (pathDepth == FILE_INFO_DEPTH) {
+		_HandleFileNode(sessionId, nodePath, nodeData);
+		return;
+	}
+
+	// Our own published state comes back to us through the subscription, and
+	// skipping it keeps us out of our own user list.  Note this deliberately
+	// does not apply to file results above: seeing your own shared files in a
+	// query is useful, and is what BeShare does.
+	if (sessionId == fLocalSessionId)
+		return;
+
+	_HandleUserNode(sessionId, nodePath, *nodeMessage);
+}
+
+
+void
+ServerConnection::_HandleUserNode(const String& sessionId, const String& nodePath,
+	const Message& nodeMessageRef)
+{
+	const Message* nodeMessage = &nodeMessageRef;
 
 	const char* nodeNameClause = GetPathClause(USER_NAME_DEPTH, nodePath());
 	if (nodeNameClause == NULL)
@@ -452,6 +579,53 @@ ServerConnection::_HandleNodeUpdated(const String& nodePath, const MessageRef& n
 
 	if (didChange || isNewUser)
 		_NotifyUserUpdated(sessionId, isNewUser);
+}
+
+
+void
+ServerConnection::_HandleFileNode(const String& sessionId, const String& nodePath,
+	const MessageRef& nodeData)
+{
+	if (fQueryActive == false)
+		return;
+
+	const char* fileNameClause = GetPathClause(FILE_INFO_DEPTH, nodePath());
+	if (fileNameClause == NULL)
+		return;
+
+	// Re-check against the criteria we currently care about.  The server can
+	// still be draining results from a subscription we have already replaced,
+	// and showing those would silently mix two queries' results together.
+	if (fSessionMatcher.Match(sessionId()) == false
+			|| fFileNameMatcher.Match(fileNameClause) == false) {
+		return;
+	}
+
+	// File nodes are published deflated when the sharer's client supports it.
+	// InflateMessage passes an uncompressed Message through untouched, so this
+	// is safe either way.
+	MessageRef inflated = InflateMessage(nodeData);
+	if (inflated() == NULL)
+		return;
+
+	FileResult result;
+	result.sessionId = sessionId;
+	result.fileName = fileNameClause;
+	result.attributes = inflated;
+
+	// "files" or "fires": the third character is the whole firewall signal.
+	const char* shareClause = GetPathClause(USER_NAME_DEPTH, nodePath());
+	result.isFirewalled = (shareClause != NULL && strlen(shareClause) > 2
+		&& shareClause[2] == 'r');
+
+	(void) inflated()->FindInt64(BESHARE_FIELD_FILE_SIZE, result.fileSize);
+	(void) inflated()->FindInt32(BESHARE_FIELD_MODIFICATION_TIME,
+		result.modificationTime);
+	(void) inflated()->FindString(BESHARE_FIELD_PATH, result.path);
+	(void) inflated()->FindString(BESHARE_FIELD_KIND, result.kind);
+
+	if (fListener != NULL)
+		fListener->QueryResultAdded(result);
 }
 
 

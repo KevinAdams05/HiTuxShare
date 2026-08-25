@@ -7,6 +7,7 @@
 
 
 #include "core/ChatMessage.h"
+#include "core/FileResult.h"
 #include "core/UserRecord.h"
 
 
@@ -65,6 +66,35 @@ public:
 	  * @param message the line
 	  */
 	virtual void ChatMessageReceived(const ChatMessage& message) = 0;
+
+	/** A file matching the running query appeared, or an already-known one was
+	  * re-published with new details.
+	  *
+	  * Results keep arriving for as long as the query runs, so this is called
+	  * long after the initial sweep finishes.
+	  *
+	  * @param result the file
+	  */
+	virtual void QueryResultAdded(const FileResult& result) = 0;
+
+	/** A file stopped being shared, or its sharer left.
+	  * @param sessionId who was sharing it
+	  * @param fileName the file that went away
+	  */
+	virtual void QueryResultRemoved(const muscle::String& sessionId,
+		const muscle::String& fileName) = 0;
+
+	/** Every result was dropped, because the query changed or stopped. */
+	virtual void QueryResultsCleared() = 0;
+
+	/** The initial sweep of a query started or finished.
+	  *
+	  * False does not mean no more results are coming -- it means the server has
+	  * finished sending what it already had. The subscription stays live.
+	  *
+	  * @param isSweeping true while the server is still sending existing matches
+	  */
+	virtual void QuerySweepStateChanged(bool isSweeping) = 0;
 
 	/** A peer answered a ping we sent them.
 	  * @param user the peer that replied
