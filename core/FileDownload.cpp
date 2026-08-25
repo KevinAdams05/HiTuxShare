@@ -5,6 +5,7 @@
 
 #include "core/FileDownload.h"
 
+#include "reflector/RateLimitSessionIOPolicy.h"
 #include "util/StringTokenizer.h"
 #include "util/TimeUtilityFunctions.h"
 
@@ -75,6 +76,7 @@ FileDownload::FileDownload(ICallbackMechanism* callbackMechanism,
 	CallbackMessageTransceiverThread(callbackMechanism),
 	fListener(NULL),
 	fRetainFilePaths(false),
+	fRateLimit(0),
 	fDownloadDirectory(downloadDirectory),
 	fState(DOWNLOAD_IDLE),
 	fOutputFile(NULL),
@@ -135,6 +137,13 @@ FileDownload::Start(const String& hostName, uint16 port,
 		fErrorText = startResult();
 		_SetState(DOWNLOAD_FAILED);
 		return startResult;
+	}
+
+	// The policy applies to sessions created after it is set, so it has to go on
+	// before the connect session rather than after.
+	if (fRateLimit > 0) {
+		AbstractSessionIOPolicyRef policy(new RateLimitSessionIOPolicy(fRateLimit));
+		(void) SetNewInputPolicy(policy);
 	}
 
 	const status_t connectResult = AddNewConnectSession(hostName, port);

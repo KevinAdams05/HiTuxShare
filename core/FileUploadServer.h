@@ -66,6 +66,21 @@ public:
 
 	void SetListener(FileUploadServerListener* listener) { fListener = listener; }
 
+	/** Caps how many peers we serve at once. Others are told they are queued.
+	  * @param maxSimultaneousUploads the cap; at least one
+	  */
+	void SetMaxSimultaneousUploads(uint32 maxSimultaneousUploads)
+	{
+		fMaxSimultaneousUploads
+			= muscle::muscleMax(maxSimultaneousUploads, (uint32) 1);
+	}
+
+	/** Caps the send rate in bytes per second; zero means no limit.
+	  * Must be set before StartListening(), since it applies to new sessions.
+	  * @param bytesPerSecond the cap
+	  */
+	void SetRateLimit(uint32 bytesPerSecond) { fRateLimit = bytesPerSecond; }
+
 	/** Replaces the set of files we are willing to serve, keyed by leaf name.
 	  *
 	  * Nothing outside this set is servable: a request names a file, and a name
@@ -98,13 +113,15 @@ public:
 	  */
 	struct UploadStatus
 	{
-		UploadStatus() : fileSize(0), bytesSent(0), isSending(false) {}
+		UploadStatus()
+			: fileSize(0), bytesSent(0), isSending(false), isQueued(false) {}
 
 		muscle::String peerName;
 		muscle::String fileName;
 		int64 fileSize;
 		int64 bytesSent;
 		bool isSending;
+		bool isQueued;
 	};
 
 	/** Returns what every connected peer is currently getting from us. */
@@ -135,7 +152,8 @@ private:
 			currentFileSize(0),
 			bytesSent(0),
 			mungeMode(MUNGE_MODE_NONE),
-			nextFileIndex(0)
+			nextFileIndex(0),
+			isQueued(false)
 		{
 		}
 
@@ -153,6 +171,9 @@ private:
 
 		int32 mungeMode;
 		uint32 nextFileIndex;
+
+		// True once the peer has asked for something but is waiting for a slot.
+		bool isQueued;
 	};
 
 	void _HandleFileList(const muscle::String& sessionId,
@@ -160,6 +181,8 @@ private:
 	bool _BeginNextFile(const muscle::String& sessionId, PeerUpload& peer);
 	void _SendNextChunk(const muscle::String& sessionId, PeerUpload& peer);
 	void _CloseCurrentFile(PeerUpload& peer);
+	uint32 _CountActiveUploads() const;
+	void _StartNextQueuedPeer();
 	void _SendToPeer(const muscle::String& sessionId,
 		const muscle::MessageRef& message);
 
@@ -174,6 +197,8 @@ private:
 	muscle::String fLocalUserName;
 
 	uint16 fListenPort;
+	uint32 fMaxSimultaneousUploads;
+	uint32 fRateLimit;
 };
 
 

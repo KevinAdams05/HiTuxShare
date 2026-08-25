@@ -5,6 +5,7 @@
 
 #include "core/FileUploadServer.h"
 
+#include "reflector/RateLimitSessionIOPolicy.h"
 #include "reflector/StorageReflectConstants.h"
 
 using namespace muscle;
@@ -29,7 +30,9 @@ FileUploadServer::FileUploadServer(ICallbackMechanism* callbackMechanism)
 	:
 	CallbackMessageTransceiverThread(callbackMechanism),
 	fListener(NULL),
-	fListenPort(0)
+	fListenPort(0),
+	fMaxSimultaneousUploads(4),
+	fRateLimit(0)
 {
 }
 
@@ -67,6 +70,7 @@ FileUploadServer::GetUploadStatuses() const
 		status.fileSize = peer.currentFileSize;
 		status.bytesSent = peer.bytesSent;
 		status.isSending = (peer.currentFile != NULL);
+		status.isQueued = peer.isQueued;
 		(void) statuses.AddTail(status);
 	}
 
@@ -89,6 +93,11 @@ FileUploadServer::StartListening(uint16 preferredPort, uint16 portRange)
 
 	if (StartInternalThread().IsError())
 		return 0;
+
+	if (fRateLimit > 0) {
+		AbstractSessionIOPolicyRef policy(new RateLimitSessionIOPolicy(fRateLimit));
+		(void) SetNewOutputPolicy(policy);
+	}
 
 	// Walk a range rather than insisting on one port: a second client on the
 	// same machine, or a previous run whose socket is still in TIME_WAIT, would
@@ -151,6 +160,9 @@ FileUploadServer::SessionDetached(const String& sessionId)
 		_CloseCurrentFile(*peer);
 		(void) fPeers.Remove(sessionId);
 	}
+
+	// A departure frees a slot whether they finished or gave up.
+	_StartNextQueuedPeer();
 
 	if (fListener != NULL)
 		fListener->UploadsChanged(this);
@@ -264,8 +276,61 @@ FileUploadServer::_HandleFileList(const String& sessionId, const Message& messag
 		}
 	}
 
+	// Hold the peer if we are already serving as many as we allow. Telling them
+	// they are queued is what NOTIFY_QUEUED exists for, and is far better than
+	// either refusing them or quietly serving everyone at once badly.
+	if (_CountActiveUploads() >= fMaxSimultaneousUploads) {
+		peer->isQueued = true;
+
+		MessageRef queued = GetMessageFromPool(TRANSFER_COMMAND_NOTIFY_QUEUED);
+		if (queued() != NULL)
+			_SendToPeer(sessionId, queued);
+
+		if (fListener != NULL)
+			fListener->UploadsChanged(this);
+
+		return;
+	}
+
+	peer->isQueued = false;
 	if (_BeginNextFile(sessionId, *peer))
 		_SendNextChunk(sessionId, *peer);
+}
+
+
+uint32
+FileUploadServer::_CountActiveUploads() const
+{
+	uint32 count = 0;
+	for (auto iterator = fPeers.GetIterator(); iterator.HasData(); iterator++) {
+		const PeerUpload& peer = iterator.GetValue();
+		if (peer.isQueued == false && peer.requestedFiles.HasItems())
+			count++;
+	}
+
+	return count;
+}
+
+
+void
+FileUploadServer::_StartNextQueuedPeer()
+{
+	if (_CountActiveUploads() >= fMaxSimultaneousUploads)
+		return;
+
+	for (HashtableIterator<String, PeerUpload> iterator(fPeers);
+			iterator.HasData(); iterator++) {
+		PeerUpload& peer = iterator.GetValue();
+		if (peer.isQueued == false || peer.requestedFiles.IsEmpty())
+			continue;
+
+		peer.isQueued = false;
+		const String sessionId = iterator.GetKey();
+		if (_BeginNextFile(sessionId, peer))
+			_SendNextChunk(sessionId, peer);
+
+		return;
+	}
 }
 
 
@@ -325,10 +390,14 @@ FileUploadServer::_SendNextChunk(const String& sessionId, PeerUpload& peer)
 
 		// Out of data. The downloader decides a file is complete by counting
 		// bytes against the header, so there is nothing to send to say so.
-		if (_BeginNextFile(sessionId, peer))
+		if (_BeginNextFile(sessionId, peer)) {
 			_SendNextChunk(sessionId, peer);
-		else if (fListener != NULL)
-			fListener->UploadsChanged(this);
+		} else {
+			// This peer is done, so somebody waiting can start.
+			_StartNextQueuedPeer();
+			if (fListener != NULL)
+				fListener->UploadsChanged(this);
+		}
 
 		return;
 	}

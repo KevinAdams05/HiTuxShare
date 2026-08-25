@@ -36,6 +36,23 @@ const char* const kFieldConnectOnStartup = "connectonstartup";
 const char* const kFieldNotificationsEnabled = "notifications";
 const char* const kFieldDownloadDirectory = "downloaddir";
 const char* const kFieldRetainFilePaths = "retainfilepaths";
+const char* const kFieldMaxDownloads = "maxdownloads";
+const char* const kFieldMaxUploads = "maxuploads";
+const char* const kFieldMaxDownloadRate = "maxdownloadrate";
+const char* const kFieldMaxUploadRate = "maxuploadrate";
+const char* const kFieldFirewalled = "firewalled";
+const char* const kFieldAutoClear = "autoclear";
+const char* const kFieldChatFontPointSize = "chatfontsize";
+
+// Chosen to be neighbourly rather than fast. Three at a time saturates a home
+// link perfectly well, and a peer serving one file at a time is the norm on
+// this network.
+const uint32 kDefaultMaxDownloads = 3;
+const uint32 kDefaultMaxUploads = 4;
+
+// A cap on the caps. A value of zero means "no limit" everywhere, so these only
+// bound what a stored number can be.
+const uint32 kMaximumSessionLimit = 32;
 const char* const kFieldShareDirectory = "sharedir";
 const char* const kFieldFileSharingEnabled = "sharingenabled";
 
@@ -334,6 +351,137 @@ ApplicationSettings::SetFileSharingEnabled(bool fileSharingEnabled)
 {
 	(void) fSettings.ReplaceBool(true, kFieldFileSharingEnabled,
 		fileSharingEnabled);
+}
+
+
+uint32
+ApplicationSettings::GetMaxSimultaneousDownloads() const
+{
+	int32 stored = 0;
+	if (fSettings.FindInt32(kFieldMaxDownloads, stored).IsError() || stored <= 0)
+		return kDefaultMaxDownloads;
+
+	return muscleMin((uint32) stored, kMaximumSessionLimit);
+}
+
+
+void
+ApplicationSettings::SetMaxSimultaneousDownloads(uint32 maxSimultaneousDownloads)
+{
+	(void) fSettings.ReplaceInt32(true, kFieldMaxDownloads,
+		(int32) muscleClamp(maxSimultaneousDownloads, (uint32) 1,
+			kMaximumSessionLimit));
+}
+
+
+uint32
+ApplicationSettings::GetMaxSimultaneousUploads() const
+{
+	int32 stored = 0;
+	if (fSettings.FindInt32(kFieldMaxUploads, stored).IsError() || stored <= 0)
+		return kDefaultMaxUploads;
+
+	return muscleMin((uint32) stored, kMaximumSessionLimit);
+}
+
+
+void
+ApplicationSettings::SetMaxSimultaneousUploads(uint32 maxSimultaneousUploads)
+{
+	(void) fSettings.ReplaceInt32(true, kFieldMaxUploads,
+		(int32) muscleClamp(maxSimultaneousUploads, (uint32) 1,
+			kMaximumSessionLimit));
+}
+
+
+uint32
+ApplicationSettings::GetMaxDownloadRate() const
+{
+	int32 stored = 0;
+	if (fSettings.FindInt32(kFieldMaxDownloadRate, stored).IsError() || stored < 0)
+		return 0;
+
+	return (uint32) stored;
+}
+
+
+void
+ApplicationSettings::SetMaxDownloadRate(uint32 maxDownloadRate)
+{
+	(void) fSettings.ReplaceInt32(true, kFieldMaxDownloadRate,
+		(int32) maxDownloadRate);
+}
+
+
+uint32
+ApplicationSettings::GetMaxUploadRate() const
+{
+	int32 stored = 0;
+	if (fSettings.FindInt32(kFieldMaxUploadRate, stored).IsError() || stored < 0)
+		return 0;
+
+	return (uint32) stored;
+}
+
+
+void
+ApplicationSettings::SetMaxUploadRate(uint32 maxUploadRate)
+{
+	(void) fSettings.ReplaceInt32(true, kFieldMaxUploadRate,
+		(int32) maxUploadRate);
+}
+
+
+bool
+ApplicationSettings::GetFirewalled() const
+{
+	bool firewalled = false;
+	(void) fSettings.FindBool(kFieldFirewalled, firewalled);
+	return firewalled;
+}
+
+
+void
+ApplicationSettings::SetFirewalled(bool firewalled)
+{
+	(void) fSettings.ReplaceBool(true, kFieldFirewalled, firewalled);
+}
+
+
+bool
+ApplicationSettings::GetAutoClearFinishedTransfers() const
+{
+	bool autoClear = false;
+	(void) fSettings.FindBool(kFieldAutoClear, autoClear);
+	return autoClear;
+}
+
+
+void
+ApplicationSettings::SetAutoClearFinishedTransfers(bool autoClearFinishedTransfers)
+{
+	(void) fSettings.ReplaceBool(true, kFieldAutoClear, autoClearFinishedTransfers);
+}
+
+
+uint32
+ApplicationSettings::GetChatFontPointSize() const
+{
+	int32 stored = 0;
+	if (fSettings.FindInt32(kFieldChatFontPointSize, stored).IsError()
+			|| stored <= 0) {
+		return 0;
+	}
+
+	return muscleClamp((uint32) stored, (uint32) 6, (uint32) 32);
+}
+
+
+void
+ApplicationSettings::SetChatFontPointSize(uint32 chatFontPointSize)
+{
+	(void) fSettings.ReplaceInt32(true, kFieldChatFontPointSize,
+		(int32) chatFontPointSize);
 }
 
 

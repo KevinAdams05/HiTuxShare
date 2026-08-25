@@ -101,6 +101,45 @@ public:
 	bool GetFileSharingEnabled() const;
 	void SetFileSharingEnabled(bool fileSharingEnabled);
 
+	/** How many downloads may run at once. Beyond this they queue.
+	  *
+	  * A cap is politeness rather than tuning: starting fifteen simultaneous
+	  * connections to the same peer is a good way to be banned by them, and
+	  * BeShare has had this limit since the beginning.
+	  */
+	uint32 GetMaxSimultaneousDownloads() const;
+	void SetMaxSimultaneousDownloads(uint32 maxSimultaneousDownloads);
+
+	/** How many peers may download from us at once. Beyond this they are told
+	  * they are queued, which is what BeShare's NOTIFY_QUEUED exists for.
+	  */
+	uint32 GetMaxSimultaneousUploads() const;
+	void SetMaxSimultaneousUploads(uint32 maxSimultaneousUploads);
+
+	/** Download rate cap in bytes per second; zero means no limit. */
+	uint32 GetMaxDownloadRate() const;
+	void SetMaxDownloadRate(uint32 maxDownloadRate);
+
+	/** Upload rate cap in bytes per second; zero means no limit. */
+	uint32 GetMaxUploadRate() const;
+	void SetMaxUploadRate(uint32 maxUploadRate);
+
+	/** Whether we are behind a firewall and cannot accept connections.
+	  *
+	  * Changes which node path our files are published under, so peers know to
+	  * ask us to connect back to them instead.
+	  */
+	bool GetFirewalled() const;
+	void SetFirewalled(bool firewalled);
+
+	/** Whether finished transfers drop out of the list on their own. */
+	bool GetAutoClearFinishedTransfers() const;
+	void SetAutoClearFinishedTransfers(bool autoClearFinishedTransfers);
+
+	/** Chat font point size; zero means follow the system font. */
+	uint32 GetChatFontPointSize() const;
+	void SetChatFontPointSize(uint32 chatFontPointSize);
+
 	bool GetRetainFilePaths() const;
 	void SetRetainFilePaths(bool retainFilePaths);
 

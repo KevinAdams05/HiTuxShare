@@ -19,7 +19,10 @@ DownloadManager::DownloadManager(ICallbackMechanism* callbackMechanism)
 	:
 	fCallbackMechanism(callbackMechanism),
 	fListener(NULL),
-	fRetainFilePaths(false)
+	fRetainFilePaths(false),
+	fMaxSimultaneousDownloads(3),
+	fRateLimit(0),
+	fAutoClearFinished(false)
 {
 }
 
@@ -91,6 +94,8 @@ DownloadManager::StartDownloads(const Queue<FileResult>& results,
 				group[i].fileSize);
 		}
 
+		download->SetRateLimit(fRateLimit);
+
 		if (fDownloads.AddTail(download).IsError()) {
 			delete download;
 			continue;
@@ -98,14 +103,16 @@ DownloadManager::StartDownloads(const Queue<FileResult>& results,
 
 		listChanged = true;
 
-		if (download->Start(sharer->hostName, (uint16) sharer->port, sessionId,
-				localSessionId, localUserName).IsError()) {
-			if (fListener != NULL) {
-				fListener->DownloadReport(LOG_ERROR_MESSAGE,
-					String("Could not reach ") + sharer->GetDisplayName()
-						+ ": " + download->GetErrorText());
-			}
-		} else if (fListener != NULL) {
+		QueuedStart queued;
+		queued.download = download;
+		queued.hostName = sharer->hostName;
+		queued.port = (uint16) sharer->port;
+		queued.remoteSessionId = sessionId;
+		queued.localSessionId = localSessionId;
+		queued.localUserName = localUserName;
+		(void) fQueuedStarts.AddTail(queued);
+
+		if (fListener != NULL) {
 			fListener->DownloadReport(LOG_INFORMATION_MESSAGE,
 				String("Asking ") + sharer->GetDisplayName() + " for "
 					+ String("%1").Arg(group.GetNumItems()) + " file(s).");
@@ -114,6 +121,48 @@ DownloadManager::StartDownloads(const Queue<FileResult>& results,
 
 	if (listChanged && fListener != NULL)
 		fListener->DownloadListChanged();
+
+	// Only now: everything the user asked for is visible in the list, and the
+	// cap decides how many of them actually open a connection.
+	_StartNextQueuedDownload();
+}
+
+
+uint32
+DownloadManager::_CountRunningDownloads() const
+{
+	uint32 count = 0;
+	for (uint32 i = 0; i < fDownloads.GetNumItems(); i++) {
+		const FileDownload* download = fDownloads[i];
+		if (download->GetState() != DOWNLOAD_IDLE && download->IsFinished() == false)
+			count++;
+	}
+
+	return count;
+}
+
+
+void
+DownloadManager::_StartNextQueuedDownload()
+{
+	while (fQueuedStarts.HasItems()
+			&& _CountRunningDownloads() < fMaxSimultaneousDownloads) {
+		QueuedStart queued;
+		if (fQueuedStarts.RemoveHead(queued).IsError())
+			return;
+
+		// It may have been cancelled while waiting.
+		if (_FindIndexOf(queued.download) < 0)
+			continue;
+
+		if (queued.download->Start(queued.hostName, queued.port,
+				queued.remoteSessionId, queued.localSessionId,
+				queued.localUserName).IsError() && fListener != NULL) {
+			fListener->DownloadReport(LOG_ERROR_MESSAGE,
+				String("Could not reach that peer: ")
+					+ queued.download->GetErrorText());
+		}
+	}
 }
 
 
@@ -143,6 +192,14 @@ DownloadManager::ClearFinishedDownloads()
 
 	if (removedAny && fListener != NULL)
 		fListener->DownloadListChanged();
+}
+
+
+void
+DownloadManager::PerformIdleTasks()
+{
+	if (fAutoClearFinished)
+		ClearFinishedDownloads();
 }
 
 
@@ -179,6 +236,16 @@ DownloadManager::DownloadStateChanged(FileDownload* download)
 
 	if (fListener != NULL)
 		fListener->DownloadChanged((uint32) index);
+
+	// A finished or failed download frees a slot for whatever is waiting.
+	//
+	// Auto-clear deliberately does NOT happen here. We are inside a callback
+	// made from the FileDownload's own _SetState(), so deleting it now would
+	// destroy the object whose method is still on the stack. The front-end
+	// clears finished transfers from its idle tick instead, where nothing is
+	// mid-call.
+	if (download->IsFinished())
+		_StartNextQueuedDownload();
 }
 
 

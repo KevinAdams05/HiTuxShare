@@ -101,6 +101,12 @@ public:
 	/** Whether to recreate the sharer's sub-path under the download directory.
 	  * @param retainFilePaths true to rebuild their directory structure
 	  */
+	/** Caps the receive rate in bytes per second; zero means no limit.
+	  * Must be set before Start(), because the policy applies to new sessions.
+	  * @param bytesPerSecond the cap
+	  */
+	void SetRateLimit(uint32 bytesPerSecond) { fRateLimit = bytesPerSecond; }
+
 	void SetRetainFilePaths(bool retainFilePaths)
 	{
 		fRetainFilePaths = retainFilePaths;
@@ -197,6 +203,7 @@ private:
 
 	FileDownloadListener* fListener;
 	bool fRetainFilePaths;
+	uint32 fRateLimit;
 
 	muscle::String fDownloadDirectory;
 	muscle::String fRemoteSessionId;

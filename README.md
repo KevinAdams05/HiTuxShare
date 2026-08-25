@@ -88,6 +88,17 @@ build/qt/hitux                                        # the GUI
 build/tools/probe/hitux-probe <server> [nick] [port]  # headless, for testing
 ```
 
+**Settings** (File → Settings, or Ctrl+,) cover identity, the download and share
+folders, transfer limits and speed caps, and behaviour. Status is also a control in
+the main window, since changing it is a frequent thing rather than a configuration
+step.
+
+![Settings](docs/screenshots/hitux-settings.png)
+
+Every control there is bound to something that changes behaviour — a preference that
+does nothing is worse than a missing one, because it quietly lies about what the
+program will do.
+
 Settings live in `$XDG_CONFIG_HOME/hituxshare/settings.msg`
 (`~/.config/hituxshare/settings.msg`), including the remembered server list, which
 orders itself by what you actually connect to.

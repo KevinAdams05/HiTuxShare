@@ -97,6 +97,8 @@ private slots:
 	void _OnQueryButtonClicked();
 	void _OnQueryFieldReturnPressed();
 	void _OnFlushPendingResults();
+	void _OnStatusChanged();
+	void _OnShowSettings();
 	void _OnToggleNotifications(bool enabled);
 	void _OnChooseShareFolder();
 	void _OnToggleFileSharing(bool enabled);
@@ -125,6 +127,8 @@ private:
 	void _PopulateServerList();
 	QString _GetSelectedServerAddress() const;
 	void _UpdateStatusBar();
+	void _SetUserStatus(const muscle::String& status);
+	void _ApplySettings();
 	void _StartSharing();
 	void _StopSharing();
 	void _DrainShareScanner();
@@ -163,6 +167,7 @@ private:
 	QComboBox* fServerAddressBox;
 	QSpinBox* fServerPortField;
 	QLineEdit* fUserNameField;
+	QComboBox* fUserStatusBox;
 	QPushButton* fConnectButton;
 
 	QLabel* fStatusLabel;

@@ -14,6 +14,7 @@ add_executable(hitux
     DesktopNotifier.cpp
     FileResultModel.cpp
     MainWindow.cpp
+    SettingsDialog.cpp
     TransferModel.cpp
     UserListModel.cpp
     main.cpp

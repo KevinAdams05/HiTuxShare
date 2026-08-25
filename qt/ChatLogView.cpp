@@ -7,6 +7,7 @@
 
 #include "qt/QtConversions.h"
 
+#include <QApplication>
 #include <QEvent>
 #include <QScrollBar>
 #include <QTime>
@@ -97,6 +98,22 @@ ChatLogView::AppendLocalMessage(LogMessageType type, const QString& text)
 	const QColor color = _GetColorForMessageType(type);
 	_AppendHtmlLine(QStringLiteral("<span style=\"color:%1;\">%2</span>")
 		.arg(color.name(), text.toHtmlEscaped()));
+}
+
+
+void
+ChatLogView::SetFontPointSize(uint32 pointSize)
+{
+	QFont chatFont = font();
+	if (pointSize == 0) {
+		// Back to whatever the application font is, rather than to a number we
+		// picked -- the user's system font is the right default.
+		chatFont.setPointSize(QApplication::font().pointSize());
+	} else {
+		chatFont.setPointSize((int) pointSize);
+	}
+
+	setFont(chatFont);
 }
 
 

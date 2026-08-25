@@ -43,6 +43,11 @@ public:
 	  */
 	void AppendLocalMessage(LogMessageType type, const QString& text);
 
+	/** Sets the chat font size in points; zero restores the system default.
+	  * @param pointSize the size to use
+	  */
+	void SetFontPointSize(uint32 pointSize);
+
 	void SetShowTimestamps(bool showTimestamps);
 	bool GetShowTimestamps() const { return fShowTimestamps; }
 

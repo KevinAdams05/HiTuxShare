@@ -13,6 +13,7 @@
 #include "qt/DesktopNotifier.h"
 #include "qt/FileResultModel.h"
 #include "qt/QtConversions.h"
+#include "qt/SettingsDialog.h"
 #include "qt/TransferModel.h"
 #include "qt/UserListModel.h"
 
@@ -113,6 +114,7 @@ MainWindow::MainWindow(QWidget* parent)
 	fServerAddressBox(nullptr),
 	fServerPortField(nullptr),
 	fUserNameField(nullptr),
+	fUserStatusBox(nullptr),
 	fConnectButton(nullptr),
 	fStatusLabel(nullptr),
 	fUserCountLabel(nullptr),
@@ -158,13 +160,15 @@ MainWindow::MainWindow(QWidget* parent)
 	fResultsModel->SetUserRegistry(&fConnection.GetUsers());
 
 	fNotifier = new DesktopNotifier(this);
-	fNotifier->SetEnabled(fSettings.GetNotificationsEnabled());
 
 	fDownloads.SetListener(this);
 	fUploadServer.SetListener(this);
 	fTransferModel->SetUploadServer(&fUploadServer);
-	fDownloads.SetDownloadDirectory(fSettings.GetDownloadDirectory());
-	fDownloads.SetRetainFilePaths(fSettings.GetRetainFilePaths());
+
+	// Everything stored becomes running behaviour in one place, so a setting
+	// cannot be half-wired: if it is not applied in _ApplySettings(), it does
+	// nothing at all.
+	_ApplySettings();
 
 	_UpdateConnectionWidgets();
 	_UpdateQueryWidgets();
@@ -226,6 +230,22 @@ MainWindow::_BuildUserInterface()
 	fUserNameField = new QLineEdit(centralWidget);
 	fUserNameField->setMaximumWidth(160);
 	connectionLayout->addWidget(fUserNameField);
+
+	connectionLayout->addWidget(new QLabel(tr("Status:"), centralWidget));
+
+	// Editable with presets rather than a plain field: "here" and "away" cover
+	// almost every use, but the protocol carries free text and people use it.
+	// Changing status is a frequent action, so it belongs in the window rather
+	// than behind a settings dialog.
+	fUserStatusBox = new QComboBox(centralWidget);
+	fUserStatusBox->setEditable(true);
+	fUserStatusBox->setInsertPolicy(QComboBox::NoInsert);
+	fUserStatusBox->setMinimumWidth(120);
+	fUserStatusBox->addItems({tr("here"), tr("away"), tr("busy"),
+		tr("back soon"), tr("idle")});
+	connect(fUserStatusBox, &QComboBox::currentTextChanged,
+		this, &MainWindow::_OnStatusChanged);
+	connectionLayout->addWidget(fUserStatusBox);
 
 	fConnectButton = new QPushButton(tr("Connect"), centralWidget);
 	fConnectButton->setDefault(false);
@@ -453,6 +473,13 @@ MainWindow::_BuildMenus()
 	fDisconnectAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+K")));
 
 	fileMenu->addSeparator();
+
+	QAction* settingsAction = fileMenu->addAction(tr("&Settings..."), this,
+		&MainWindow::_OnShowSettings);
+	// Spelled out rather than QKeySequence::Preferences, which has zero
+	// bindings on X11 -- relying on it leaves the item with no shortcut at all.
+	settingsAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+,")));
+	settingsAction->setMenuRole(QAction::PreferencesRole);
 
 	fileMenu->addAction(tr("Choose &Share Folder..."), this,
 		&MainWindow::_OnChooseShareFolder);
@@ -845,6 +872,93 @@ MainWindow::_DrainShareScanner()
 
 
 void
+MainWindow::_OnStatusChanged()
+{
+	const QString status = fUserStatusBox->currentText().trimmed();
+	if (status.isEmpty())
+		return;
+
+	// SetLocalUserStatus republishes only when the value actually differs, so
+	// this is safe to call on every keystroke.
+	fConnection.SetLocalUserStatus(ToMuscleString(status));
+	fSettings.SetUserStatus(ToMuscleString(status));
+}
+
+
+void
+MainWindow::_OnShowSettings()
+{
+	SettingsDialog dialog(fSettings, this);
+	if (dialog.exec() != QDialog::Accepted)
+		return;
+
+	const bool wasSharing = fSettings.GetFileSharingEnabled();
+	dialog.ApplyToSettings();
+
+	_ApplySettings();
+
+	// Sharing has to be restarted rather than adjusted: the folder or the
+	// firewall flag may have changed, and both decide what gets published.
+	const bool isSharing = fSettings.GetFileSharingEnabled();
+	if (wasSharing || isSharing) {
+		_StopSharing();
+		if (isSharing && fConnection.IsConnected())
+			_StartSharing();
+	}
+
+	fFileSharingAction->setChecked(isSharing);
+	fNotificationsAction->setChecked(fSettings.GetNotificationsEnabled());
+	(void) fSettings.Save();
+}
+
+
+void
+MainWindow::_SetUserStatus(const muscle::String& status)
+{
+	fConnection.SetLocalUserStatus(status);
+	fSettings.SetUserStatus(status);
+
+	const QSignalBlocker blocker(fUserStatusBox);
+	fUserStatusBox->setCurrentText(ToQString(status));
+
+	_AppendLocalLine(LOG_INFORMATION_MESSAGE,
+		tr("Status set to %1.").arg(ToQString(status)));
+}
+
+
+void
+MainWindow::_ApplySettings()
+{
+	// One place where stored settings become running behaviour, so a new
+	// setting cannot be half-wired: if it is not applied here, it does nothing.
+	fConnection.SetLocalUserName(fSettings.GetUserName());
+	fConnection.SetLocalUserStatus(fSettings.GetUserStatus());
+	fConnection.SetFirewalled(fSettings.GetFirewalled());
+
+	fDownloads.SetDownloadDirectory(fSettings.GetDownloadDirectory());
+	fDownloads.SetRetainFilePaths(fSettings.GetRetainFilePaths());
+	fDownloads.SetMaxSimultaneousDownloads(
+		fSettings.GetMaxSimultaneousDownloads());
+	fDownloads.SetRateLimit(fSettings.GetMaxDownloadRate());
+	fDownloads.SetAutoClearFinished(fSettings.GetAutoClearFinishedTransfers());
+
+	fUploadServer.SetMaxSimultaneousUploads(
+		fSettings.GetMaxSimultaneousUploads());
+	fUploadServer.SetRateLimit(fSettings.GetMaxUploadRate());
+
+	fNotifier->SetEnabled(fSettings.GetNotificationsEnabled());
+	fChatLogView->SetFontPointSize(fSettings.GetChatFontPointSize());
+
+	fUserNameField->setText(ToQString(fSettings.GetUserName()));
+
+	// Block signals so restoring the control does not look like the user
+	// changing it, which would republish and re-save on every apply.
+	const QSignalBlocker blocker(fUserStatusBox);
+	fUserStatusBox->setCurrentText(ToQString(fSettings.GetUserStatus()));
+}
+
+
+void
 MainWindow::_OnToggleNotifications(bool enabled)
 {
 	fSettings.SetNotificationsEnabled(enabled);
@@ -971,6 +1085,7 @@ void
 MainWindow::_OnIdleTimerFired()
 {
 	fConnection.PerformIdleTasks();
+	fDownloads.PerformIdleTasks();
 	_DrainShareScanner();
 }
 
@@ -1066,19 +1181,13 @@ MainWindow::_HandleUserInput(const QString& input)
 		}
 
 		case CHAT_COMMAND_STATUS:
-			fConnection.SetLocalUserStatus(command.argument.HasChars()
+			_SetUserStatus(command.argument.HasChars()
 				? command.argument : muscle::String("here"));
-			_AppendLocalLine(LOG_INFORMATION_MESSAGE,
-				tr("Status set to %1.")
-					.arg(ToQString(fConnection.GetLocalUserStatus())));
 			break;
 
 		case CHAT_COMMAND_AWAY:
-			fConnection.SetLocalUserStatus(command.argument.HasChars()
+			_SetUserStatus(command.argument.HasChars()
 				? command.argument : fSettings.GetAwayStatus());
-			_AppendLocalLine(LOG_INFORMATION_MESSAGE,
-				tr("Status set to %1.")
-					.arg(ToQString(fConnection.GetLocalUserStatus())));
 			break;
 
 		case CHAT_COMMAND_MESSAGE:
