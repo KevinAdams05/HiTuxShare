@@ -34,6 +34,13 @@ const char* const kFieldServerPort = "serverport";
 const char* const kFieldInstallId = "installid";
 const char* const kFieldConnectOnStartup = "connectonstartup";
 
+// Named to match HiShare's own settings key, so the two files stay legible to
+// anyone reading both.
+const char* const kFieldServerList = "serverlist";
+
+// Keep the list short enough to stay a menu rather than a haystack.
+const uint32 kMaximumRememberedServers = 16;
+
 const char* const kDefaultUserName = "binky";
 const char* const kDefaultUserStatus = "here";
 const char* const kDefaultAwayStatus = "away";
@@ -41,6 +48,13 @@ const char* const kDefaultAwayStatus = "away";
 // The long-running public server the BeShare community has used for years.  It is a
 // starting point, not a hard-coded dependency -- the user can point anywhere.
 const char* const kDefaultServerAddress = "beshare.tycomsystems.com";
+
+// The servers HiShare ships with: Minox's and Alexander G. M. Smith's.  Both have
+// been up for years, and the second is run by a Haiku developer who is usually on it.
+const char* const kDefaultServerList[] = {
+	"beshare.tycomsystems.com",
+	"beshare.agmsmith.ca"
+};
 
 // Sanity cap for the settings file.  It normally holds a few hundred bytes; the
 // only way past this is corruption, and refusing is better than allocating on a
@@ -194,6 +208,61 @@ void
 ApplicationSettings::SetServerAddress(const String& serverAddress)
 {
 	_SetString(kFieldServerAddress, serverAddress);
+}
+
+
+Queue<String>
+ApplicationSettings::GetServerList() const
+{
+	Queue<String> serverList;
+
+	String serverAddress;
+	for (int32 i = 0; fSettings.FindString(kFieldServerList, i, serverAddress).IsOK();
+			i++) {
+		if (serverAddress.HasChars())
+			(void) serverList.AddTail(serverAddress);
+	}
+
+	if (serverList.IsEmpty()) {
+		for (uint32 i = 0; i < ARRAYITEMS(kDefaultServerList); i++)
+			(void) serverList.AddTail(kDefaultServerList[i]);
+	}
+
+	return serverList;
+}
+
+
+void
+ApplicationSettings::SetServerList(const Queue<String>& serverList)
+{
+	(void) fSettings.RemoveName(kFieldServerList);
+
+	for (uint32 i = 0; i < serverList.GetNumItems(); i++)
+		(void) fSettings.AddString(kFieldServerList, serverList[i]);
+}
+
+
+void
+ApplicationSettings::RememberServer(const String& serverAddress)
+{
+	if (serverAddress.IsEmpty())
+		return;
+
+	Queue<String> serverList = GetServerList();
+
+	// Drop any existing entry first so promoting an already-known server moves it
+	// rather than duplicating it.  Case-insensitive, because host names are.
+	for (int32 i = (int32) serverList.GetNumItems() - 1; i >= 0; i--) {
+		if (serverList[i].EqualsIgnoreCase(serverAddress))
+			(void) serverList.RemoveItemAt((uint32) i);
+	}
+
+	(void) serverList.AddHead(serverAddress);
+
+	while (serverList.GetNumItems() > kMaximumRememberedServers)
+		(void) serverList.RemoveTail();
+
+	SetServerList(serverList);
 }
 
 

@@ -1,0 +1,13 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+    <qresource prefix="/icons">
+        <file alias="hituxshare-16.png">../assets/icon/hituxshare-16.png</file>
+        <file alias="hituxshare-22.png">../assets/icon/hituxshare-22.png</file>
+        <file alias="hituxshare-24.png">../assets/icon/hituxshare-24.png</file>
+        <file alias="hituxshare-32.png">../assets/icon/hituxshare-32.png</file>
+        <file alias="hituxshare-48.png">../assets/icon/hituxshare-48.png</file>
+        <file alias="hituxshare-64.png">../assets/icon/hituxshare-64.png</file>
+        <file alias="hituxshare-128.png">../assets/icon/hituxshare-128.png</file>
+        <file alias="hituxshare-256.png">../assets/icon/hituxshare-256.png</file>
+    </qresource>
+</RCC>

@@ -16,6 +16,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QComboBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
@@ -95,7 +96,7 @@ MainWindow::MainWindow(QWidget* parent)
 	fUserListModel(nullptr),
 	fUserListProxyModel(nullptr),
 	fSplitter(nullptr),
-	fServerAddressField(nullptr),
+	fServerAddressBox(nullptr),
 	fServerPortField(nullptr),
 	fUserNameField(nullptr),
 	fConnectButton(nullptr),
@@ -161,9 +162,15 @@ MainWindow::_BuildUserInterface()
 
 	connectionLayout->addWidget(new QLabel(tr("Server:"), centralWidget));
 
-	fServerAddressField = new QLineEdit(centralWidget);
-	fServerAddressField->setMinimumWidth(220);
-	connectionLayout->addWidget(fServerAddressField, 1);
+	// Editable so a server that is not on the list can still be typed in, but with
+	// NoInsert: entries are added by RememberServer() once a connection actually
+	// succeeds, so a typo never earns a permanent place in the menu.
+	fServerAddressBox = new QComboBox(centralWidget);
+	fServerAddressBox->setEditable(true);
+	fServerAddressBox->setInsertPolicy(QComboBox::NoInsert);
+	fServerAddressBox->setMinimumWidth(260);
+	fServerAddressBox->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+	connectionLayout->addWidget(fServerAddressBox, 1);
 
 	fServerPortField = new QSpinBox(centralWidget);
 	fServerPortField->setRange(1, 65535);
@@ -314,7 +321,7 @@ MainWindow::_BuildMenus()
 void
 MainWindow::_LoadSettings()
 {
-	fServerAddressField->setText(ToQString(fSettings.GetServerAddress()));
+	_PopulateServerList();
 	fServerPortField->setValue(fSettings.GetServerPort());
 	fUserNameField->setText(ToQString(fSettings.GetUserName()));
 
@@ -346,7 +353,7 @@ MainWindow::_LoadSettings()
 void
 MainWindow::_SaveSettings()
 {
-	fSettings.SetServerAddress(ToMuscleString(fServerAddressField->text()));
+	fSettings.SetServerAddress(ToMuscleString(_GetSelectedServerAddress()));
 	fSettings.SetServerPort((uint16) fServerPortField->value());
 	fSettings.SetUserName(ToMuscleString(fUserNameField->text()));
 	fSettings.SetUserStatus(fConnection.GetLocalUserStatus());
@@ -383,6 +390,12 @@ MainWindow::ConnectionStateChanged(ConnectionState state)
 void
 MainWindow::LocalSessionIdAssigned(const String& sessionId, const String& hostName)
 {
+	// Promote only now, not at connect time: reaching a session ID is the first point
+	// at which we know the server is a working BeShare server and not just a socket
+	// that happened to accept us.
+	fSettings.RememberServer(fConnection.GetServerAddress());
+	_PopulateServerList();
+
 	setWindowTitle(tr("%1 -- %2 on %3")
 		.arg(QLatin1String(HITUX_SHARE_NAME),
 			ToQString(fConnection.GetLocalUserName()),
@@ -586,7 +599,7 @@ MainWindow::_HandleUserInput(const QString& input)
 
 		case CHAT_COMMAND_CONNECT:
 			if (command.argument.HasChars())
-				fServerAddressField->setText(ToQString(command.argument));
+				fServerAddressBox->setCurrentText(ToQString(command.argument));
 
 			_ConnectToConfiguredServer();
 			break;
@@ -743,7 +756,7 @@ MainWindow::_ShowConnectionInformation()
 void
 MainWindow::_ConnectToConfiguredServer()
 {
-	const QString serverAddress = fServerAddressField->text().trimmed();
+	const QString serverAddress = _GetSelectedServerAddress();
 	if (serverAddress.isEmpty()) {
 		_AppendLocalLine(LOG_ERROR_MESSAGE, tr("Enter a server address first."));
 		return;
@@ -763,6 +776,34 @@ MainWindow::_ConnectToConfiguredServer()
 
 
 void
+MainWindow::_PopulateServerList()
+{
+	const QString previousSelection = fServerAddressBox->currentText();
+
+	// Repopulating clears the edit field, so restore whatever the user had typed --
+	// this runs after a successful connect, and silently discarding their text would
+	// be worse than the reordering is helpful.
+	fServerAddressBox->clear();
+
+	const Queue<muscle::String> serverList = fSettings.GetServerList();
+	for (uint32 i = 0; i < serverList.GetNumItems(); i++)
+		fServerAddressBox->addItem(ToQString(serverList[i]));
+
+	if (previousSelection.isEmpty() == false)
+		fServerAddressBox->setCurrentText(previousSelection);
+	else
+		fServerAddressBox->setCurrentText(ToQString(fSettings.GetServerAddress()));
+}
+
+
+QString
+MainWindow::_GetSelectedServerAddress() const
+{
+	return fServerAddressBox->currentText().trimmed();
+}
+
+
+void
 MainWindow::_UpdateConnectionWidgets()
 {
 	const ConnectionState state = fConnection.GetConnectionState();
@@ -774,7 +815,7 @@ MainWindow::_UpdateConnectionWidgets()
 
 	// The server fields describe where we are connected, so freeze them while that
 	// is true rather than letting them drift out of sync with reality.
-	fServerAddressField->setEnabled(isDisconnected);
+	fServerAddressBox->setEnabled(isDisconnected);
 	fServerPortField->setEnabled(isDisconnected);
 }
 

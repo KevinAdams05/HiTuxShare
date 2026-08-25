@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=HiTuxShare
+GenericName=BeShare Client
+Comment=Chat and share files on the BeShare network
+Exec=hitux
+Icon=hituxshare
+Terminal=false
+Categories=Network;FileTransfer;InstantMessaging;
+Keywords=BeShare;MUSCLE;Haiku;chat;filesharing;
+StartupNotify=true
+StartupWMClass=hitux

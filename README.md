@@ -20,11 +20,14 @@ the live public server, where it correctly reads BeShare 3.04 and JavaShare peer
 | 3 — Sharing | Not started |
 | 4 — Polish, i18n, packaging | Not started |
 
-What works today: connect and reconnect, live user list with status / client /
-file-count columns, public chat, `/me` actions, private messages, ping with
-round-trip timing, nickname changes, input history, nickname tab-completion,
-timestamps, light and dark themes, and persistent settings including window and
-splitter geometry.
+What works today: connect and reconnect, a remembered server dropdown, live user
+list with status / client / file-count columns, public chat, `/me` actions, private
+messages, ping with round-trip timing, nickname changes, input history, nickname
+tab-completion, timestamps, light and dark themes, and persistent settings including
+window and splitter geometry.
+
+The app icon is BeShare's, converted from HiShare's original HVIF vector source —
+see [`assets/icon/README.md`](assets/icon/README.md).
 
 Binaries are **2.3 MB stripped** and idle at 0% CPU.
 
@@ -59,7 +62,11 @@ build/tools/probe/hitux-probe <server> [nick] [port]  # headless, for testing
 ```
 
 Settings live in `$XDG_CONFIG_HOME/hituxshare/settings.msg`
-(`~/.config/hituxshare/settings.msg`).
+(`~/.config/hituxshare/settings.msg`), including the remembered server list, which
+orders itself by what you actually connect to.
+
+`cmake --install build --prefix ~/.local` puts the binary, the `.desktop` entry and
+the icon theme files where a desktop environment will find them.
 
 ## Documentation
 

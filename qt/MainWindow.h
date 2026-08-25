@@ -17,6 +17,7 @@
 
 class QAction;
 class QLabel;
+class QComboBox;
 class QLineEdit;
 class QPushButton;
 class QSortFilterProxyModel;
@@ -85,6 +86,8 @@ private:
 
 	void _ConnectToConfiguredServer();
 	void _UpdateConnectionWidgets();
+	void _PopulateServerList();
+	QString _GetSelectedServerAddress() const;
 	void _UpdateStatusBar();
 
 	QStringList _GetCompletionCandidates(const QString& prefix) const;
@@ -105,7 +108,7 @@ private:
 	QSortFilterProxyModel* fUserListProxyModel;
 	QSplitter* fSplitter;
 
-	QLineEdit* fServerAddressField;
+	QComboBox* fServerAddressBox;
 	QSpinBox* fServerPortField;
 	QLineEdit* fUserNameField;
 	QPushButton* fConnectButton;

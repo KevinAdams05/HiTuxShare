@@ -7,6 +7,7 @@
 
 
 #include "message/Message.h"
+#include "util/Queue.h"
 #include "util/String.h"
 
 
@@ -50,6 +51,23 @@ public:
 
 	muscle::String GetServerAddress() const;
 	void SetServerAddress(const muscle::String& serverAddress);
+
+	/** Returns the remembered server list, most recently used first.
+	  *
+	  * Never empty: if nothing has been stored yet it returns the two long-running
+	  * public servers, which is what BeShare and HiShare have always shipped with.
+	  */
+	muscle::Queue<muscle::String> GetServerList() const;
+	void SetServerList(const muscle::Queue<muscle::String>& serverList);
+
+	/** Moves a server to the front of the remembered list, adding it if new.
+	  *
+	  * Called after a successful connection, so the list orders itself by what the
+	  * user actually uses instead of by whatever order they were typed in.
+	  *
+	  * @param serverAddress the server to promote
+	  */
+	void RememberServer(const muscle::String& serverAddress);
 
 	uint16 GetServerPort() const;
 	void SetServerPort(uint16 serverPort);
