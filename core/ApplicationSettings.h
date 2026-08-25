@@ -142,6 +142,14 @@ public:
 	uint32 GetChatFontPointSize() const;
 	void SetChatFontPointSize(uint32 chatFontPointSize);
 
+	/** Servers to reconnect to besides the main one, restored at startup.
+	  *
+	  * Named "extraserver" to match HiShare's settings file, so the two remain
+	  * legible side by side.
+	  */
+	muscle::Queue<muscle::String> GetExtraServers() const;
+	void SetExtraServers(const muscle::Queue<muscle::String>& servers);
+
 	/** Whether to fetch the community server list at startup.
 	  *
 	  * Off by default. It contacts a third party and reveals this machine's

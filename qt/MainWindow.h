@@ -9,6 +9,8 @@
 #include "core/ApplicationSettings.h"
 #include "core/ChatAliases.h"
 #include "core/ChatLogger.h"
+#include "core/ConnectionManager.h"
+#include "qt/FileResultModel.h"
 #include "core/ChatCommandParser.h"
 #include "core/DownloadManager.h"
 #include "core/FileUploadServer.h"
@@ -43,7 +45,7 @@ class ChatInputLine;
 class ChatLogView;
 class DesktopNotifier;
 class ServerListUpdater;
-class FileResultModel;
+
 class UserListModel;
 
 
@@ -64,19 +66,24 @@ public:
 	~MainWindow() override;
 
 	// ServerConnectionListener
-	void ConnectionStateChanged(ConnectionState state) override;
-	void LocalSessionIdAssigned(const muscle::String& sessionId,
-		const muscle::String& hostName) override;
-	void UserUpdated(const UserRecord& user, bool isNewUser) override;
-	void UserLeft(const UserRecord& user) override;
-	void ChatMessageReceived(const ChatMessage& message) override;
-	void PingReplyReceived(const UserRecord& user, uint64 roundTripMicroseconds,
-		const muscle::String& peerVersion) override;
-	void QueryResultAdded(const FileResult& result) override;
-	void QueryResultRemoved(const muscle::String& sessionId,
-		const muscle::String& fileName) override;
-	void QueryResultsCleared() override;
-	void QuerySweepStateChanged(bool isSweeping) override;
+	void ConnectionStateChanged(ServerConnection* connection,
+		ConnectionState state) override;
+	void LocalSessionIdAssigned(ServerConnection* connection,
+		const muscle::String& sessionId, const muscle::String& hostName) override;
+	void UserUpdated(ServerConnection* connection, const UserRecord& user,
+		bool isNewUser) override;
+	void UserLeft(ServerConnection* connection, const UserRecord& user) override;
+	void ChatMessageReceived(ServerConnection* connection,
+		const ChatMessage& message) override;
+	void PingReplyReceived(ServerConnection* connection, const UserRecord& user,
+		uint64 roundTripMicroseconds, const muscle::String& peerVersion) override;
+	void QueryResultAdded(ServerConnection* connection,
+		const FileResult& result) override;
+	void QueryResultRemoved(ServerConnection* connection,
+		const muscle::String& sessionId, const muscle::String& fileName) override;
+	void QueryResultsCleared(ServerConnection* connection) override;
+	void QuerySweepStateChanged(ServerConnection* connection,
+		bool isSweeping) override;
 
 	// DownloadManagerListener
 	void DownloadListChanged() override;
@@ -103,6 +110,8 @@ private slots:
 	void _OnQueryFieldReturnPressed();
 	void _OnFlushPendingResults();
 	void _OnStatusChanged();
+	void _OnConnectAdditionalServer();
+	void _OnDisconnectAll();
 	void _OnServerListReceived(const QStringList& serversToAdd,
 		const QStringList& serversToRemove);
 	void _OnShowSettings();
@@ -126,6 +135,7 @@ private:
 	void _ShowConnectionInformation();
 
 	void _ConnectToConfiguredServer();
+	ServerConnection* _Primary() const { return fConnections.GetPrimary(); }
 	void _StartQuery();
 	void _DownloadSelectedResults();
 	void _UpdateQueryWidgets();
@@ -138,6 +148,9 @@ private:
 	QString _GetUserName() const;
 	QString _GetSelectedServerAddress() const;
 	void _UpdateStatusBar();
+	void _UpdateMultiServerUi();
+	void _RestoreExtraServers();
+	void _SaveExtraServers();
 	void _SetUserStatus(const muscle::String& status);
 	void _HandleFilterCommand(UserFilterSet& filter, const muscle::String& argument,
 		const QString& filterName, void (ApplicationSettings::*setter)(
@@ -160,7 +173,11 @@ private:
 	muscle::QPostEventCallbackMechanism fCallbackMechanism;
 
 	ApplicationSettings fSettings;
-	ServerConnection fConnection;
+	ConnectionManager fConnections;
+
+	// Pending chat lines, buffered so a burst from several servers at once is
+	// one flush rather than one repaint each.
+
 
 	ChatLogView* fChatLogView;
 	QTreeView* fResultsView;
@@ -203,7 +220,7 @@ private:
 	// A bare "*" against a peer sharing twenty thousand files delivers twenty
 	// thousand results in a burst.  They are buffered and flushed as one model
 	// transaction rather than inserted a row at a time.
-	QVector<FileResult> fPendingResults;
+	QVector<FileResultModel::Entry> fPendingResults;
 	QTimer* fResultFlushTimer;
 	bool fUserNamesDirty;
 

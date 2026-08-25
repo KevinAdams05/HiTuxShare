@@ -6,7 +6,6 @@
 #include "qt/FileResultModel.h"
 
 #include "core/FormatUtilities.h"
-#include "core/UserRegistry.h"
 #include "qt/QtConversions.h"
 
 
@@ -15,8 +14,7 @@ namespace hitux {
 
 FileResultModel::FileResultModel(QObject* parent)
 	:
-	QAbstractTableModel(parent),
-	fUsers(nullptr)
+	QAbstractTableModel(parent)
 {
 }
 
@@ -46,7 +44,8 @@ FileResultModel::data(const QModelIndex& index, int role) const
 	if (index.isValid() == false || index.row() >= fResults.size())
 		return QVariant();
 
-	const FileResult& result = fResults.at(index.row());
+	const Entry& entry = fResults.at(index.row());
+	const FileResult& result = entry.result;
 
 	switch (role) {
 		case kSessionIdRole:
@@ -96,9 +95,11 @@ FileResultModel::data(const QModelIndex& index, int role) const
 			return ToQString(FormatByteSize(result.fileSize));
 
 		case COLUMN_USER:
-			return fUsers != nullptr
-				? ToQString(fUsers->GetDisplayNameForSession(result.sessionId))
-				: ToQString(result.sessionId);
+			return entry.sharerName.isEmpty()
+				? ToQString(result.sessionId) : entry.sharerName;
+
+		case COLUMN_SERVER:
+			return entry.serverName;
 
 		case COLUMN_MODIFIED:
 			return ToQString(FormatTimestamp(result.modificationTime));
@@ -131,6 +132,9 @@ FileResultModel::headerData(int section, Qt::Orientation orientation, int role) 
 		case COLUMN_USER:
 			return tr("Shared by");
 
+		case COLUMN_SERVER:
+			return tr("Server");
+
 		case COLUMN_MODIFIED:
 			return tr("Modified");
 
@@ -147,25 +151,26 @@ FileResultModel::headerData(int section, Qt::Orientation orientation, int role) 
 
 
 void
-FileResultModel::AddResults(const QVector<FileResult>& results)
+FileResultModel::AddResults(const QVector<Entry>& entries)
 {
-	if (results.isEmpty())
+	if (entries.isEmpty())
 		return;
 
 	// Split into genuinely new rows and refreshes of rows we already hold: the
 	// first go in as one insert, the second as in-place updates.
-	QVector<FileResult> additions;
-	additions.reserve(results.size());
+	QVector<Entry> additions;
+	additions.reserve(entries.size());
 
-	for (const FileResult& result : results) {
-		const QString key = _MakeKey(result.sessionId, result.fileName);
+	for (const Entry& entry : entries) {
+		const QString key = _MakeKey(entry.connection, entry.result.sessionId,
+			entry.result.fileName);
 		const auto existing = fRowsByKey.constFind(key);
 		if (existing != fRowsByKey.constEnd()) {
-			fResults[existing.value()] = result;
+			fResults[existing.value()] = entry;
 			emit dataChanged(index(existing.value(), 0),
 				index(existing.value(), COLUMN_COUNT - 1));
 		} else {
-			additions.append(result);
+			additions.append(entry);
 		}
 	}
 
@@ -175,10 +180,10 @@ FileResultModel::AddResults(const QVector<FileResult>& results)
 	const int firstRow = fResults.size();
 	beginInsertRows(QModelIndex(), firstRow, firstRow + additions.size() - 1);
 
-	for (const FileResult& result : additions) {
-		fRowsByKey.insert(_MakeKey(result.sessionId, result.fileName),
-			fResults.size());
-		fResults.append(result);
+	for (const Entry& entry : additions) {
+		fRowsByKey.insert(_MakeKey(entry.connection, entry.result.sessionId,
+			entry.result.fileName), fResults.size());
+		fResults.append(entry);
 	}
 
 	endInsertRows();
@@ -186,10 +191,11 @@ FileResultModel::AddResults(const QVector<FileResult>& results)
 
 
 void
-FileResultModel::RemoveResult(const muscle::String& sessionId,
-	const muscle::String& fileName)
+FileResultModel::RemoveResult(const void* connection,
+	const muscle::String& sessionId, const muscle::String& fileName)
 {
-	const auto existing = fRowsByKey.constFind(_MakeKey(sessionId, fileName));
+	const auto existing
+		= fRowsByKey.constFind(_MakeKey(connection, sessionId, fileName));
 	if (existing == fRowsByKey.constEnd())
 		return;
 
@@ -202,15 +208,18 @@ FileResultModel::RemoveResult(const muscle::String& sessionId,
 
 
 void
-FileResultModel::RemoveResultsForSession(const muscle::String& sessionId)
+FileResultModel::RemoveResultsForSession(const void* connection,
+	const muscle::String& sessionId)
 {
 	const QString sessionIdString = ToQString(sessionId);
 
-	QVector<FileResult> kept;
+	QVector<Entry> kept;
 	kept.reserve(fResults.size());
-	for (const FileResult& result : fResults) {
-		if (ToQString(result.sessionId) != sessionIdString)
-			kept.append(result);
+	for (const Entry& entry : fResults) {
+		if (entry.connection != connection
+				|| ToQString(entry.result.sessionId) != sessionIdString) {
+			kept.append(entry);
+		}
 	}
 
 	if (kept.size() == fResults.size())
@@ -237,18 +246,57 @@ FileResultModel::Clear()
 
 
 void
-FileResultModel::RefreshUserNames()
+FileResultModel::RemoveResultsForConnection(const void* connection)
 {
-	if (fResults.isEmpty())
+	QVector<Entry> kept;
+	kept.reserve(fResults.size());
+	for (const Entry& entry : fResults) {
+		if (entry.connection != connection)
+			kept.append(entry);
+	}
+
+	if (kept.size() == fResults.size())
 		return;
 
-	emit dataChanged(index(0, COLUMN_USER),
-		index(fResults.size() - 1, COLUMN_USER));
+	beginResetModel();
+	fResults = kept;
+	_RebuildIndex();
+	endResetModel();
 }
 
 
-const FileResult*
-FileResultModel::GetResultForRow(int row) const
+void
+FileResultModel::UpdateSharerName(const void* connection,
+	const muscle::String& sessionId, const QString& displayName)
+{
+	const QString sessionIdString = ToQString(sessionId);
+	int firstChanged = -1;
+	int lastChanged = -1;
+
+	for (int row = 0; row < fResults.size(); row++) {
+		Entry& entry = fResults[row];
+		if (entry.connection != connection
+				|| ToQString(entry.result.sessionId) != sessionIdString
+				|| entry.sharerName == displayName) {
+			continue;
+		}
+
+		entry.sharerName = displayName;
+		if (firstChanged < 0)
+			firstChanged = row;
+
+		lastChanged = row;
+	}
+
+	if (firstChanged >= 0) {
+		emit dataChanged(index(firstChanged, COLUMN_USER),
+			index(lastChanged, COLUMN_USER));
+	}
+}
+
+
+const FileResultModel::Entry*
+FileResultModel::GetEntryForRow(int row) const
 {
 	if (row < 0 || row >= fResults.size())
 		return nullptr;
@@ -258,12 +306,16 @@ FileResultModel::GetResultForRow(int row) const
 
 
 QString
-FileResultModel::_MakeKey(const muscle::String& sessionId,
-	const muscle::String& fileName)
+FileResultModel::_MakeKey(const void* connection,
+	const muscle::String& sessionId, const muscle::String& fileName)
 {
-	// A newline cannot appear in a session ID, so it cannot make two different
-	// pairs collide the way a more obvious separator might.
-	return ToQString(sessionId) + QChar('\n') + ToQString(fileName);
+	// The connection is part of the key because a session ID is only unique
+	// within one server: the same ID on two servers is two different people.
+	// A newline cannot appear in any of these, so it cannot make two different
+	// triples collide the way a more obvious separator might.
+	return QString::number(reinterpret_cast<quintptr>(connection))
+		+ QChar('\n') + ToQString(sessionId) + QChar('\n')
+		+ ToQString(fileName);
 }
 
 
@@ -273,8 +325,8 @@ FileResultModel::_RebuildIndex()
 	fRowsByKey.clear();
 	fRowsByKey.reserve(fResults.size());
 	for (int row = 0; row < fResults.size(); row++) {
-		fRowsByKey.insert(_MakeKey(fResults[row].sessionId,
-			fResults[row].fileName), row);
+		fRowsByKey.insert(_MakeKey(fResults[row].connection,
+			fResults[row].result.sessionId, fResults[row].result.fileName), row);
 	}
 }
 

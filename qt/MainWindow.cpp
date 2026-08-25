@@ -24,6 +24,7 @@
 #include <QApplication>
 #include <QCloseEvent>
 #include <QFileDialog>
+#include <QInputDialog>
 #include <QComboBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -97,7 +98,7 @@ MainWindow::MainWindow(QWidget* parent)
 	:
 	QMainWindow(parent),
 	fCallbackMechanism(this),
-	fConnection(&fCallbackMechanism),
+	fConnections(&fCallbackMechanism),
 	fChatLogView(nullptr),
 	fResultsView(nullptr),
 	fResultsModel(nullptr),
@@ -143,10 +144,10 @@ MainWindow::MainWindow(QWidget* parent)
 	_BuildMenus();
 	_LoadSettings();
 
-	fConnection.SetListener(this);
-	fConnection.SetInstallId(fSettings.GetInstallId());
-	fConnection.SetLocalUserName(fSettings.GetUserName());
-	fConnection.SetLocalUserStatus(fSettings.GetUserStatus());
+	fConnections.SetListener(this);
+	fConnections.SetInstallId(fSettings.GetInstallId());
+	fConnections.SetLocalUserName(fSettings.GetUserName());
+	fConnections.SetLocalUserStatus(fSettings.GetUserStatus());
 
 	fIdleTimer = new QTimer(this);
 	fIdleTimer->setInterval(kIdleTimerIntervalMilliseconds);
@@ -161,7 +162,6 @@ MainWindow::MainWindow(QWidget* parent)
 	connect(fResultFlushTimer, &QTimer::timeout,
 		this, &MainWindow::_OnFlushPendingResults);
 
-	fResultsModel->SetUserRegistry(&fConnection.GetUsers());
 
 	fNotifier = new DesktopNotifier(this);
 
@@ -192,6 +192,8 @@ MainWindow::MainWindow(QWidget* parent)
 			.arg(QLatin1String(HITUX_SHARE_NAME),
 				QLatin1String(HITUX_SHARE_VERSION_STRING)));
 
+	_RestoreExtraServers();
+
 	if (fSettings.GetAutoUpdateServerList())
 		fServerListUpdater->Start();
 
@@ -203,7 +205,7 @@ MainWindow::MainWindow(QWidget* parent)
 MainWindow::~MainWindow()
 {
 	// Stop the connection talking to us before any of our widgets go away.
-	fConnection.SetListener(nullptr);
+	fConnections.SetListener(nullptr);
 }
 
 
@@ -322,13 +324,20 @@ MainWindow::_BuildUserInterface()
 	fResultsView->setSelectionMode(QAbstractItemView::ExtendedSelection);
 	fResultsView->setUniformRowHeights(true);
 	fResultsView->header()->setStretchLastSection(false);
-	fResultsView->header()->setSectionResizeMode(FileResultModel::COLUMN_NAME,
-		QHeaderView::Stretch);
-	for (int column = FileResultModel::COLUMN_SIZE;
-			column < FileResultModel::COLUMN_COUNT; column++) {
-		fResultsView->header()->setSectionResizeMode(column,
-			QHeaderView::ResizeToContents);
-	}
+	fResultsView->header()->setSectionResizeMode(QHeaderView::Interactive);
+
+	// File gets the lion's share: it is the column people read, and letting it
+	// be squeezed to an ellipsis by a long MIME type makes the list useless.
+	fResultsView->setColumnWidth(FileResultModel::COLUMN_NAME, 340);
+	fResultsView->setColumnWidth(FileResultModel::COLUMN_SIZE, 90);
+	fResultsView->setColumnWidth(FileResultModel::COLUMN_USER, 130);
+	fResultsView->setColumnWidth(FileResultModel::COLUMN_SERVER, 150);
+	fResultsView->setColumnWidth(FileResultModel::COLUMN_MODIFIED, 140);
+	fResultsView->setColumnWidth(FileResultModel::COLUMN_KIND, 180);
+	fResultsView->setColumnWidth(FileResultModel::COLUMN_PATH, 200);
+
+	// The Server column is noise until there is more than one of them.
+	fResultsView->setColumnHidden(FileResultModel::COLUMN_SERVER, true);
 
 	resultsLayout->addWidget(fResultsView, 1);
 	fLeftSplitter->addWidget(resultsContainer);
@@ -367,10 +376,14 @@ MainWindow::_BuildUserInterface()
 	fTransfersView->setUniformRowHeights(true);
 	fTransfersView->setItemDelegateForColumn(TransferModel::COLUMN_PROGRESS,
 		new TransferProgressDelegate(this));
-	fTransfersView->header()->setStretchLastSection(true);
-	fTransfersView->header()->setSectionResizeMode(TransferModel::COLUMN_FILE,
-		QHeaderView::Stretch);
+	fTransfersView->header()->setStretchLastSection(false);
+	fTransfersView->header()->setSectionResizeMode(QHeaderView::Interactive);
+	fTransfersView->setColumnWidth(TransferModel::COLUMN_FILE, 280);
 	fTransfersView->setColumnWidth(TransferModel::COLUMN_PROGRESS, 110);
+	fTransfersView->setColumnWidth(TransferModel::COLUMN_SIZE, 90);
+	fTransfersView->setColumnWidth(TransferModel::COLUMN_RATE, 90);
+	fTransfersView->setColumnWidth(TransferModel::COLUMN_FROM, 130);
+	fTransfersView->setColumnWidth(TransferModel::COLUMN_STATUS, 180);
 	transfersLayout->addWidget(fTransfersView, 1);
 
 	QHBoxLayout* transferActionLayout = new QHBoxLayout();
@@ -433,18 +446,25 @@ MainWindow::_BuildUserInterface()
 	// Fixed pixel widths are wrong twice over here: they ignore the user's font size,
 	// and five guessed widths overflow this pane so the rightmost column vanishes
 	// behind a horizontal scrollbar.
+	// Every section Interactive, because Qt makes Stretch and ResizeToContents
+	// sections impossible for the user to drag. Sensible starting widths give
+	// the same tidy first impression without taking the ability away, and the
+	// layout is saved, so an adjustment sticks.
 	QHeaderView* userListHeader = fUserListView->header();
 	userListHeader->setStretchLastSection(false);
-	userListHeader->setSectionResizeMode(UserListModel::COLUMN_NAME,
-		QHeaderView::Stretch);
-	userListHeader->setSectionResizeMode(UserListModel::COLUMN_STATUS,
-		QHeaderView::ResizeToContents);
-	userListHeader->setSectionResizeMode(UserListModel::COLUMN_CLIENT,
-		QHeaderView::ResizeToContents);
-	userListHeader->setSectionResizeMode(UserListModel::COLUMN_FILES,
-		QHeaderView::ResizeToContents);
-	userListHeader->setSectionResizeMode(UserListModel::COLUMN_HOST,
-		QHeaderView::ResizeToContents);
+	userListHeader->setSectionResizeMode(QHeaderView::Interactive);
+	fUserListView->setColumnWidth(UserListModel::COLUMN_NAME, 150);
+	fUserListView->setColumnWidth(UserListModel::COLUMN_STATUS, 90);
+	fUserListView->setColumnWidth(UserListModel::COLUMN_CLIENT, 140);
+	fUserListView->setColumnWidth(UserListModel::COLUMN_FILES, 70);
+	fUserListView->setColumnWidth(UserListModel::COLUMN_SERVER, 150);
+	fUserListView->setColumnWidth(UserListModel::COLUMN_HOST, 140);
+
+	// Hidden until there is more than one server, and set here rather than
+	// beside the results view's equivalent -- fUserListView does not exist yet
+	// at that point in this function, which is a segfault rather than a
+	// no-op.
+	fUserListView->setColumnHidden(UserListModel::COLUMN_SERVER, true);
 
 	// Host is the least useful column while we are only doing chat, and it is the one
 	// that pushes the pane into needing a scrollbar.  It stays available in the row
@@ -487,8 +507,13 @@ MainWindow::_BuildMenus()
 	fConnectAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+K")));
 
 	fDisconnectAction = fileMenu->addAction(tr("&Disconnect"), this,
-		[this]() { fConnection.DisconnectFromServer(); });
+		[this]() { fConnections.DisconnectAll(); });
 	fDisconnectAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+K")));
+
+	fileMenu->addAction(tr("Connect to &Additional Server..."), this,
+		&MainWindow::_OnConnectAdditionalServer);
+	fileMenu->addAction(tr("Disconnect &All"), this,
+		&MainWindow::_OnDisconnectAll);
 
 	fileMenu->addSeparator();
 
@@ -587,13 +612,14 @@ MainWindow::_SaveSettings()
 	fSettings.SetServerAddress(ToMuscleString(_GetSelectedServerAddress()));
 	fSettings.SetServerPort((uint16) fServerPortField->value());
 	fSettings.SetUserName(ToMuscleString(_GetUserName()));
-	fSettings.SetUserStatus(fConnection.GetLocalUserStatus());
+	fSettings.SetUserStatus(fSettings.GetUserStatus());
 
 	PutByteArray(fSettings.GetRawMessage(), kSettingsFieldWindowGeometry,
 		saveGeometry());
 	PutByteArray(fSettings.GetRawMessage(), kSettingsFieldSplitterState,
 		fSplitter->saveState());
 	_SaveColumnLayouts();
+	_SaveExtraServers();
 	(void) fSettings.GetRawMessage().ReplaceBool(true, kSettingsFieldShowTimestamps,
 		fShowTimestampsAction->isChecked());
 	(void) fSettings.GetRawMessage().ReplaceBool(true, kSettingsFieldShowHostColumn,
@@ -607,26 +633,33 @@ MainWindow::_SaveSettings()
 
 
 void
-MainWindow::ConnectionStateChanged(ConnectionState state)
+MainWindow::ConnectionStateChanged(ServerConnection* connection,
+	ConnectionState state)
 {
 	if (state == CONNECTION_DISCONNECTED) {
-		fUserListModel->Clear();
+		// Only this connection's users; another server may still be up.
+		if (connection != nullptr) {
+			fUserListModel->RemoveUsersForConnection(connection);
+			fResultsModel->RemoveResultsForConnection(connection);
+		}
 		setWindowTitle(QLatin1String(HITUX_SHARE_NAME));
 	}
 
 	_UpdateConnectionWidgets();
 	_UpdateQueryWidgets();
+	_UpdateMultiServerUi();
 	_UpdateStatusBar();
 }
 
 
 void
-MainWindow::LocalSessionIdAssigned(const String& sessionId, const String& /*hostName*/)
+MainWindow::LocalSessionIdAssigned(ServerConnection* connection,
+	const String& sessionId, const String& /*hostName*/)
 {
 	// Promote only now, not at connect time: reaching a session ID is the first point
 	// at which we know the server is a working BeShare server and not just a socket
 	// that happened to accept us.
-	fSettings.RememberServer(fConnection.GetServerAddress());
+	fSettings.RememberServer(connection->GetServerAddress());
 	_PopulateServerList();
 
 	// Deliberately the server's address, not the (hostName) the server reports back.
@@ -635,8 +668,8 @@ MainWindow::LocalSessionIdAssigned(const String& sessionId, const String& /*host
 	// be putting on screen during a screen-share or a screenshot.
 	setWindowTitle(tr("%1 -- %2 on %3")
 		.arg(QLatin1String(HITUX_SHARE_NAME),
-			ToQString(fConnection.GetLocalUserName()),
-			ToQString(fConnection.GetServerAddress())));
+			ToQString(fSettings.GetUserName()),
+			ToQString(connection->GetServerAddress())));
 
 	_AppendLocalLine(LOG_INFORMATION_MESSAGE,
 		tr("You are session %1.").arg(ToQString(sessionId)));
@@ -647,9 +680,11 @@ MainWindow::LocalSessionIdAssigned(const String& sessionId, const String& /*host
 
 
 void
-MainWindow::UserUpdated(const UserRecord& user, bool isNewUser)
+MainWindow::UserUpdated(ServerConnection* connection, const UserRecord& user,
+	bool isNewUser)
 {
-	fUserListModel->UpdateUser(user);
+	fUserListModel->UpdateUser(connection,
+		ToQString(connection->GetServerAddress()), user);
 	fUserNamesDirty = true;
 	if (fResultFlushTimer->isActive() == false)
 		fResultFlushTimer->start();
@@ -666,14 +701,14 @@ MainWindow::UserUpdated(const UserRecord& user, bool isNewUser)
 
 
 void
-MainWindow::UserLeft(const UserRecord& user)
+MainWindow::UserLeft(ServerConnection* connection, const UserRecord& user)
 {
-	fUserListModel->RemoveUser(user.sessionId);
+	fUserListModel->RemoveUser(connection, user.sessionId);
 
 	// Their files went with them.  Dropping the lot in one operation matters:
 	// a peer sharing thousands of files would otherwise arrive as thousands of
 	// individual removals, each shifting every row after it.
-	fResultsModel->RemoveResultsForSession(user.sessionId);
+	fResultsModel->RemoveResultsForSession(connection, user.sessionId);
 	_UpdateResultCount();
 
 	ChatMessage leaveMessage(LOG_USER_EVENT_MESSAGE, muscle::String());
@@ -686,7 +721,8 @@ MainWindow::UserLeft(const UserRecord& user)
 
 
 void
-MainWindow::ChatMessageReceived(const ChatMessage& message)
+MainWindow::ChatMessageReceived(ServerConnection* connection,
+	const ChatMessage& message)
 {
 	// Ignored users are dropped before anything else sees them: not logged, not
 	// counted, not notified. A half-ignored user is worse than none.
@@ -697,6 +733,14 @@ MainWindow::ChatMessageReceived(const ChatMessage& message)
 	}
 
 	ChatMessage displayed = message;
+
+	// With several servers connected, who said something is only half the
+	// answer -- the same name on two servers is two different people.
+	if (fConnections.GetCount() > 1 && connection != nullptr
+			&& displayed.senderName.HasChars()) {
+		displayed.senderName = displayed.senderName + "@"
+			+ connection->GetServerAddress();
+	}
 
 	// A watched user's lines are marked for highlighting, so they stand out in a
 	// busy room without a sound or a popup.
@@ -713,7 +757,8 @@ MainWindow::ChatMessageReceived(const ChatMessage& message)
 
 
 void
-MainWindow::PingReplyReceived(const UserRecord& user, uint64 roundTripMicroseconds,
+MainWindow::PingReplyReceived(ServerConnection* /*connection*/,
+	const UserRecord& user, uint64 roundTripMicroseconds,
 	const String& peerVersion)
 {
 	QString text = tr("Ping reply from %1: %2 ms")
@@ -728,33 +773,48 @@ MainWindow::PingReplyReceived(const UserRecord& user, uint64 roundTripMicrosecon
 
 
 void
-MainWindow::QueryResultAdded(const FileResult& result)
+MainWindow::QueryResultAdded(ServerConnection* connection,
+	const FileResult& result)
 {
-	fPendingResults.append(result);
+	FileResultModel::Entry entry;
+	entry.result = result;
+	entry.connection = connection;
+	entry.serverName = ToQString(connection->GetServerAddress());
+	entry.sharerName = ToQString(
+		connection->GetUsers().GetDisplayNameForSession(result.sessionId));
+
+	fPendingResults.append(entry);
 	if (fResultFlushTimer->isActive() == false)
 		fResultFlushTimer->start();
 }
 
 
 void
-MainWindow::QueryResultRemoved(const String& sessionId, const String& fileName)
+MainWindow::QueryResultRemoved(ServerConnection* connection,
+	const String& sessionId, const String& fileName)
 {
-	fResultsModel->RemoveResult(sessionId, fileName);
+	fResultsModel->RemoveResult(connection, sessionId, fileName);
 	_UpdateResultCount();
 }
 
 
 void
-MainWindow::QueryResultsCleared()
+MainWindow::QueryResultsCleared(ServerConnection* connection)
 {
-	fPendingResults.clear();
-	fResultsModel->Clear();
+	// Only this connection's rows: another server's query may still be live.
+	for (int i = fPendingResults.size() - 1; i >= 0; i--) {
+		if (fPendingResults.at(i).connection == connection)
+			fPendingResults.removeAt(i);
+	}
+
+	fResultsModel->RemoveResultsForConnection(connection);
 	_UpdateResultCount();
 }
 
 
 void
-MainWindow::QuerySweepStateChanged(bool isSweeping)
+MainWindow::QuerySweepStateChanged(ServerConnection* /*connection*/,
+	bool isSweeping)
 {
 	if (isSweeping == false) {
 		// Flush immediately rather than waiting out the timer, so "search
@@ -840,9 +900,13 @@ MainWindow::_StartSharing()
 		_AppendLocalLine(LOG_ERROR_MESSAGE,
 			tr("Could not listen on any port, so nobody can download from us."));
 	} else {
-		fUploadServer.SetLocalIdentity(fConnection.GetLocalSessionId(),
-			fConnection.GetLocalUserName());
-		fConnection.SetAdvertisedPort(listenPort);
+		// One listening socket serves every server's peers, so it reports the
+		// primary connection's session ID. A peer only uses it for display.
+		const ServerConnection* primary = _Primary();
+		fUploadServer.SetLocalIdentity(
+			primary != nullptr ? primary->GetLocalSessionId() : muscle::String(),
+			fSettings.GetUserName());
+		fConnections.SetAdvertisedPort(listenPort);
 		_AppendLocalLine(LOG_INFORMATION_MESSAGE,
 			tr("Accepting downloads on port %1.").arg(listenPort));
 	}
@@ -862,9 +926,9 @@ MainWindow::_StopSharing()
 {
 	fShareScanner.StopScan();
 	fUploadServer.StopListening();
-	fConnection.SetAdvertisedPort(0);
-	fConnection.UnpublishAllSharedFiles();
-	fConnection.PublishSharedFileCount(0);
+	fConnections.SetAdvertisedPort(0);
+	fConnections.UnpublishAllSharedFiles();
+	fConnections.PublishSharedFileCountOnAll(0);
 
 	fSharedFiles.Clear();
 	fSharedFileCount = 0;
@@ -882,7 +946,7 @@ MainWindow::_DrainShareScanner()
 	// deliberately allowed to run ahead of the network.
 	const Queue<SharedFile> discovered = fShareScanner.TakeDiscoveredFiles();
 	if (discovered.HasItems()) {
-		fConnection.PublishSharedFiles(discovered);
+		fConnections.PublishSharedFilesOnAll(discovered);
 		for (uint32 i = 0; i < discovered.GetNumItems(); i++)
 			(void) fSharedFiles.Put(discovered[i].fileName, discovered[i]);
 
@@ -892,7 +956,7 @@ MainWindow::_DrainShareScanner()
 	}
 
 	if (fShareScanner.TakeScanFinished()) {
-		fConnection.PublishSharedFileCount(fSharedFileCount);
+		fConnections.PublishSharedFileCountOnAll(fSharedFileCount);
 
 		QString message = tr("Sharing %n file(s).", "", (int) fSharedFileCount);
 		const uint32 duplicates = fShareScanner.GetDuplicateNameCount();
@@ -920,9 +984,84 @@ MainWindow::_OnStatusChanged()
 
 	// SetLocalUserStatus republishes only when the value actually differs, so
 	// this is safe to call on every keystroke.
-	fConnection.SetLocalUserStatus(ToMuscleString(status));
+	fConnections.SetLocalUserStatus(ToMuscleString(status));
 	fSettings.SetUserStatus(ToMuscleString(status));
 	fSettings.RememberStatus(ToMuscleString(status));
+}
+
+
+void
+MainWindow::_OnConnectAdditionalServer()
+{
+	bool accepted = false;
+	const QString serverAddress = QInputDialog::getText(this,
+		tr("Connect to Additional Server"),
+		tr("Server address:"), QLineEdit::Normal, QString(), &accepted).trimmed();
+	if (accepted == false || serverAddress.isEmpty())
+		return;
+
+	if (fConnections.FindByAddress(ToMuscleString(serverAddress)) != nullptr) {
+		_AppendLocalLine(LOG_WARNING_MESSAGE,
+			tr("Already connected to %1.").arg(serverAddress));
+		return;
+	}
+
+	ServerConnection* connection = fConnections.AddConnection(
+		ToMuscleString(serverAddress), kDefaultServerPort);
+	if (connection == nullptr) {
+		_AppendLocalLine(LOG_ERROR_MESSAGE,
+			tr("Too many connections already."));
+		return;
+	}
+
+	_ApplySettings();
+	_SaveExtraServers();
+	_UpdateMultiServerUi();
+}
+
+
+void
+MainWindow::_OnDisconnectAll()
+{
+	fConnections.DisconnectAll();
+}
+
+
+void
+MainWindow::_UpdateMultiServerUi()
+{
+	// The Server column and the per-line server tag are noise with one
+	// connection and essential with two, so they appear exactly when they
+	// start meaning something.
+	const bool showServer = (fConnections.GetCount() > 1);
+	fResultsView->setColumnHidden(FileResultModel::COLUMN_SERVER,
+		showServer == false);
+	fUserListView->setColumnHidden(UserListModel::COLUMN_SERVER,
+		showServer == false);
+}
+
+
+void
+MainWindow::_RestoreExtraServers()
+{
+	const Queue<muscle::String> extras = fSettings.GetExtraServers();
+	for (uint32 i = 0; i < extras.GetNumItems(); i++)
+		(void) fConnections.AddConnection(extras[i], kDefaultServerPort);
+
+	_UpdateMultiServerUi();
+}
+
+
+void
+MainWindow::_SaveExtraServers()
+{
+	// Everything except the first, which is the one the Server field shows and
+	// which is already stored as "server".
+	Queue<muscle::String> extras;
+	for (uint32 i = 1; i < fConnections.GetCount(); i++)
+		(void) extras.AddTail(fConnections.GetAt(i)->GetServerAddress());
+
+	fSettings.SetExtraServers(extras);
 }
 
 
@@ -940,11 +1079,17 @@ MainWindow::_OnServerListReceived(const QStringList& serversToAdd,
 		// Never remove the server we are using or the one selected: a list
 		// fetched over the network should not be able to take away what is
 		// working right now.
-		if (candidate.EqualsIgnoreCase(fConnection.GetServerAddress())
-				|| candidate.EqualsIgnoreCase(ToMuscleString(
-					_GetSelectedServerAddress()))) {
-			continue;
+		bool isInUse = candidate.EqualsIgnoreCase(
+			ToMuscleString(_GetSelectedServerAddress()));
+		for (uint32 i = 0; i < fConnections.GetCount() && isInUse == false; i++) {
+			if (candidate.EqualsIgnoreCase(
+					fConnections.GetAt(i)->GetServerAddress())) {
+				isInUse = true;
+			}
 		}
+
+		if (isInUse)
+			continue;
 
 		for (int32 i = (int32) serverList.GetNumItems() - 1; i >= 0; i--) {
 			if (serverList[(uint32) i].EqualsIgnoreCase(candidate)) {
@@ -1008,7 +1153,7 @@ MainWindow::_OnShowSettings()
 	const bool isSharing = fSettings.GetFileSharingEnabled();
 	if (wasSharing || isSharing) {
 		_StopSharing();
-		if (isSharing && fConnection.IsConnected())
+		if (isSharing && fConnections.IsAnyConnected())
 			_StartSharing();
 	}
 
@@ -1021,7 +1166,7 @@ MainWindow::_OnShowSettings()
 void
 MainWindow::_SetUserStatus(const muscle::String& status)
 {
-	fConnection.SetLocalUserStatus(status);
+	fConnections.SetLocalUserStatus(status);
 	fSettings.SetUserStatus(status);
 	fSettings.RememberStatus(status);
 
@@ -1122,9 +1267,9 @@ MainWindow::_ApplySettings()
 {
 	// One place where stored settings become running behaviour, so a new
 	// setting cannot be half-wired: if it is not applied here, it does nothing.
-	fConnection.SetLocalUserName(fSettings.GetUserName());
-	fConnection.SetLocalUserStatus(fSettings.GetUserStatus());
-	fConnection.SetFirewalled(fSettings.GetFirewalled());
+	fConnections.SetLocalUserName(fSettings.GetUserName());
+	fConnections.SetLocalUserStatus(fSettings.GetUserStatus());
+	fConnections.SetFirewalled(fSettings.GetFirewalled());
 
 	fDownloads.SetDownloadDirectory(fSettings.GetDownloadDirectory());
 	fDownloads.SetRetainFilePaths(fSettings.GetRetainFilePaths());
@@ -1192,7 +1337,7 @@ MainWindow::_OnChooseShareFolder()
 	_AppendLocalLine(LOG_INFORMATION_MESSAGE,
 		tr("Share folder set to %1.").arg(chosen));
 
-	if (fSettings.GetFileSharingEnabled() && fConnection.IsConnected()) {
+	if (fSettings.GetFileSharingEnabled() && fConnections.IsAnyConnected()) {
 		_StopSharing();
 		_StartSharing();
 	}
@@ -1210,7 +1355,7 @@ MainWindow::_OnToggleFileSharing(bool enabled)
 		return;
 	}
 
-	if (fConnection.IsConnected())
+	if (fConnections.IsAnyConnected())
 		_StartSharing();
 	else
 		_AppendLocalLine(LOG_INFORMATION_MESSAGE,
@@ -1252,10 +1397,10 @@ MainWindow::_OnCancelSelectedTransfer()
 void
 MainWindow::_OnConnectButtonClicked()
 {
-	if (fConnection.GetConnectionState() == CONNECTION_DISCONNECTED)
+	if (fConnections.IsAnyConnected() == false)
 		_ConnectToConfiguredServer();
 	else
-		fConnection.DisconnectFromServer();
+		fConnections.DisconnectAll();
 }
 
 
@@ -1291,7 +1436,7 @@ MainWindow::_OnUserDoubleClicked(const QModelIndex& index)
 void
 MainWindow::_OnIdleTimerFired()
 {
-	fConnection.PerformIdleTasks();
+	fConnections.PerformIdleTasks();
 	fDownloads.PerformIdleTasks();
 	_DrainShareScanner();
 }
@@ -1300,8 +1445,8 @@ MainWindow::_OnIdleTimerFired()
 void
 MainWindow::_OnQueryButtonClicked()
 {
-	if (fConnection.IsQueryActive())
-		fConnection.StopQuery();
+	if (fConnections.IsAnyQueryActive())
+		fConnections.StopQueryOnAll();
 	else
 		_StartQuery();
 }
@@ -1323,11 +1468,21 @@ MainWindow::_OnFlushPendingResults()
 		_UpdateResultCount();
 	}
 
+	// A user's name arrives separately from their files, so results shared by
+	// someone whose name node has not landed yet would keep showing a bare
+	// session ID until it does.
 	if (fUserNamesDirty) {
-		// A user's name arrives separately from their files, so results shared
-		// by someone whose name node has not landed yet would otherwise keep
-		// showing a bare session ID.
-		fResultsModel->RefreshUserNames();
+		for (uint32 i = 0; i < fConnections.GetCount(); i++) {
+			ServerConnection* connection = fConnections.GetAt(i);
+			const Hashtable<muscle::String, UserRecord>& users
+				= connection->GetUsers().GetUsers();
+			for (auto iterator = users.GetIterator(); iterator.HasData();
+					iterator++) {
+				fResultsModel->UpdateSharerName(connection, iterator.GetKey(),
+					ToQString(iterator.GetValue().GetDisplayName()));
+			}
+		}
+
 		fUserNamesDirty = false;
 	}
 }
@@ -1383,7 +1538,7 @@ MainWindow::_HandleUserInput(const QString& input)
 				break;
 			}
 
-			fConnection.SetLocalUserName(command.argument);
+			fConnections.SetLocalUserName(command.argument);
 			fSettings.SetUserName(command.argument);
 
 			// /nick is how people actually change their name, so this is where
@@ -1436,7 +1591,7 @@ MainWindow::_HandleUserInput(const QString& input)
 			break;
 
 		case CHAT_COMMAND_DISCONNECT:
-			fConnection.DisconnectFromServer();
+			fConnections.DisconnectAll();
 			break;
 
 		case CHAT_COMMAND_START_QUERY:
@@ -1447,7 +1602,7 @@ MainWindow::_HandleUserInput(const QString& input)
 			break;
 
 		case CHAT_COMMAND_STOP_QUERY:
-			fConnection.StopQuery();
+			fConnections.StopQueryOnAll();
 			_UpdateQueryWidgets();
 			break;
 
@@ -1503,18 +1658,18 @@ MainWindow::_HandleUserInput(const QString& input)
 void
 MainWindow::_SendChatToEveryone(const QString& text, bool isAction)
 {
-	if (fConnection.IsConnected() == false) {
+	if (fConnections.IsAnyConnected() == false) {
 		_AppendLocalLine(LOG_ERROR_MESSAGE, tr("Not connected to a server."));
 		return;
 	}
 
-	fConnection.SendChatText(muscle::String("*"), ToMuscleString(text));
+	fConnections.SendChatToAll(ToMuscleString(text));
 
 	// We drop the server's echo of our own lines, so echo here or the sender never
 	// sees what they just said.
 	ChatMessage localEcho;
 	localEcho.type = LOG_LOCAL_USER_CHAT_MESSAGE;
-	localEcho.senderName = fConnection.GetLocalUserName();
+	localEcho.senderName = fSettings.GetUserName();
 	localEcho.isFromLocalUser = true;
 	localEcho.isAction = isAction;
 
@@ -1532,27 +1687,31 @@ MainWindow::_SendChatToEveryone(const QString& text, bool isAction)
 void
 MainWindow::_SendPrivateMessage(const QString& target, const QString& text)
 {
-	if (fConnection.IsConnected() == false) {
+	if (fConnections.IsAnyConnected() == false) {
 		_AppendLocalLine(LOG_ERROR_MESSAGE, tr("Not connected to a server."));
 		return;
 	}
 
-	const Queue<muscle::String> targetSessionIds
-		= fConnection.GetUsers().ResolveToSessionIds(ToMuscleString(target));
-	if (targetSessionIds.IsEmpty()) {
+	// A name can exist on more than one server, and those are different people.
+	// Each match carries its own connection, so the message goes to the right
+	// server rather than to whichever one happens to be primary.
+	const Queue<ResolvedUser> targets
+		= fConnections.ResolveToUsers(ToMuscleString(target));
+	if (targets.IsEmpty()) {
 		_AppendLocalLine(LOG_ERROR_MESSAGE, tr("No such user: %1").arg(target));
 		return;
 	}
 
-	for (uint32 i = 0; i < targetSessionIds.GetNumItems(); i++) {
-		fConnection.SendChatText(targetSessionIds[i], ToMuscleString(text));
+	for (uint32 i = 0; i < targets.GetNumItems(); i++) {
+		const ResolvedUser& user = targets[i];
+		user.connection->SendChatText(user.sessionId, ToMuscleString(text));
 
 		ChatMessage localEcho;
 		localEcho.type = LOG_LOCAL_USER_CHAT_MESSAGE;
 		localEcho.isPrivate = true;
 		localEcho.isFromLocalUser = true;
-		localEcho.senderName = ToMuscleString(tr("to %1").arg(ToQString(
-			fConnection.GetUsers().GetDisplayNameForSession(targetSessionIds[i]))));
+		localEcho.senderName = ToMuscleString(tr("to %1")
+			.arg(ToQString(user.displayName)));
 		localEcho.text = ToMuscleString(text);
 
 		fChatLogView->AppendChatMessage(localEcho);
@@ -1564,20 +1723,20 @@ MainWindow::_SendPrivateMessage(const QString& target, const QString& text)
 void
 MainWindow::_PingUser(const QString& target)
 {
-	if (fConnection.IsConnected() == false) {
+	if (fConnections.IsAnyConnected() == false) {
 		_AppendLocalLine(LOG_ERROR_MESSAGE, tr("Not connected to a server."));
 		return;
 	}
 
-	const Queue<muscle::String> targetSessionIds
-		= fConnection.GetUsers().ResolveToSessionIds(ToMuscleString(target));
-	if (targetSessionIds.IsEmpty()) {
+	const Queue<ResolvedUser> targets
+		= fConnections.ResolveToUsers(ToMuscleString(target));
+	if (targets.IsEmpty()) {
 		_AppendLocalLine(LOG_ERROR_MESSAGE, tr("No such user: %1").arg(target));
 		return;
 	}
 
-	for (uint32 i = 0; i < targetSessionIds.GetNumItems(); i++)
-		fConnection.SendPing(targetSessionIds[i]);
+	for (uint32 i = 0; i < targets.GetNumItems(); i++)
+		targets[i].connection->SendPing(targets[i].sessionId);
 }
 
 
@@ -1604,18 +1763,30 @@ MainWindow::_ShowCommandHelp()
 void
 MainWindow::_ShowConnectionInformation()
 {
-	if (fConnection.IsConnected() == false) {
+	if (fConnections.IsAnyConnected() == false) {
 		_AppendLocalLine(LOG_INFORMATION_MESSAGE, tr("Not connected."));
 		return;
 	}
 
 	_AppendLocalLine(LOG_INFORMATION_MESSAGE,
-		tr("Connected to %1:%2 as %3 (session %4). %5 users online.")
-			.arg(ToQString(fConnection.GetServerAddress()))
-			.arg(fConnection.GetServerPort())
-			.arg(ToQString(fConnection.GetLocalUserName()))
-			.arg(ToQString(fConnection.GetLocalSessionId()))
-			.arg(fConnection.GetUsers().GetUserCount()));
+		tr("Connected as %1:").arg(ToQString(fSettings.GetUserName())));
+
+	for (uint32 i = 0; i < fConnections.GetCount(); i++) {
+		const ServerConnection* connection = fConnections.GetAt(i);
+		if (connection->IsConnected() == false) {
+			_AppendLocalLine(LOG_INFORMATION_MESSAGE,
+				tr("  %1 -- not connected")
+					.arg(ToQString(connection->GetServerAddress())));
+			continue;
+		}
+
+		_AppendLocalLine(LOG_INFORMATION_MESSAGE,
+			tr("  %1:%2 -- session %3, %n user(s)", "",
+				(int) connection->GetUsers().GetUserCount())
+				.arg(ToQString(connection->GetServerAddress()))
+				.arg(connection->GetServerPort())
+				.arg(ToQString(connection->GetLocalSessionId())));
+	}
 }
 
 
@@ -1637,10 +1808,10 @@ MainWindow::_ConnectToConfiguredServer()
 		return;
 	}
 
-	fConnection.SetLocalUserName(ToMuscleString(userName));
+	fConnections.SetLocalUserName(ToMuscleString(userName));
 	fSettings.RememberUserName(ToMuscleString(userName));
 
-	(void) fConnection.ConnectToServer(ToMuscleString(serverAddress),
+	(void) fConnections.AddConnection(ToMuscleString(serverAddress),
 		(uint16) fServerPortField->value());
 }
 
@@ -1694,14 +1865,14 @@ void
 MainWindow::_SaveColumnLayouts()
 {
 	const QByteArray results = fResultsView->header()->saveState();
-	fSettings.SetColumnLayout("results", results.constData(),
+	fSettings.SetColumnLayout("results.v2", results.constData(),
 		(uint32) results.size());
 
 	const QByteArray users = fUserListView->header()->saveState();
-	fSettings.SetColumnLayout("users", users.constData(), (uint32) users.size());
+	fSettings.SetColumnLayout("users.v2", users.constData(), (uint32) users.size());
 
 	const QByteArray transfers = fTransfersView->header()->saveState();
-	fSettings.SetColumnLayout("transfers", transfers.constData(),
+	fSettings.SetColumnLayout("transfers.v2", transfers.constData(),
 		(uint32) transfers.size());
 }
 
@@ -1710,8 +1881,8 @@ void
 MainWindow::_RestoreColumnLayouts()
 {
 	const struct { const char* name; QTreeView* view; } views[] = {
-		{"results", fResultsView},
-		{"users", fUserListView},
+		{"results.v2", fResultsView},
+		{"users.v2", fUserListView},
 		{"transfers", fTransfersView}
 	};
 
@@ -1760,7 +1931,7 @@ MainWindow::_GetSelectedServerAddress() const
 void
 MainWindow::_StartQuery()
 {
-	if (fConnection.IsConnected() == false) {
+	if (fConnections.IsAnyConnected() == false) {
 		_AppendLocalLine(LOG_ERROR_MESSAGE, tr("Not connected to a server."));
 		return;
 	}
@@ -1769,7 +1940,7 @@ MainWindow::_StartQuery()
 
 	// An empty box means "everything", which is a legitimate thing to ask for on
 	// a small server and a very large thing to ask for on a busy one.
-	fConnection.StartQuery(muscle::String("*"),
+	fConnections.StartQueryOnAll(muscle::String("*"),
 		ToMuscleString(pattern.isEmpty() ? QStringLiteral("*") : pattern));
 
 	_UpdateQueryWidgets();
@@ -1788,13 +1959,16 @@ MainWindow::_DownloadSelectedResults()
 	}
 
 	Queue<FileResult> chosen;
+	QVector<const void*> chosenConnections;
 	for (const QModelIndex& proxyIndex : selected) {
 		const QModelIndex sourceIndex
 			= fResultsProxyModel->mapToSource(proxyIndex);
-		const FileResult* result
-			= fResultsModel->GetResultForRow(sourceIndex.row());
-		if (result != nullptr)
-			(void) chosen.AddTail(*result);
+		const FileResultModel::Entry* entry
+			= fResultsModel->GetEntryForRow(sourceIndex.row());
+		if (entry != nullptr) {
+			(void) chosen.AddTail(entry->result);
+			chosenConnections.append(entry->connection);
+		}
 	}
 
 	// Settings can have changed since construction, and a download that ignored
@@ -1802,18 +1976,33 @@ MainWindow::_DownloadSelectedResults()
 	fDownloads.SetDownloadDirectory(fSettings.GetDownloadDirectory());
 	fDownloads.SetRetainFilePaths(fSettings.GetRetainFilePaths());
 
-	fDownloads.StartDownloads(chosen, fConnection.GetUsers(),
-		fConnection.GetLocalSessionId(), fConnection.GetLocalUserName());
+	// Group by connection before starting: a session ID only means something on
+	// the server that issued it, so a result from server A must be fetched
+	// using A's user list and A's session ID.
+	for (uint32 i = 0; i < fConnections.GetCount(); i++) {
+		ServerConnection* connection = fConnections.GetAt(i);
+
+		Queue<FileResult> forThisServer;
+		for (uint32 j = 0; j < chosen.GetNumItems(); j++) {
+			if (chosenConnections[j] == connection)
+				(void) forThisServer.AddTail(chosen[j]);
+		}
+
+		if (forThisServer.HasItems()) {
+			fDownloads.StartDownloads(forThisServer, connection->GetUsers(),
+				connection->GetLocalSessionId(), fSettings.GetUserName());
+		}
+	}
 }
 
 
 void
 MainWindow::_UpdateQueryWidgets()
 {
-	const bool isActive = fConnection.IsQueryActive();
+	const bool isActive = fConnections.IsAnyQueryActive();
 	fQueryButton->setText(isActive ? tr("Stop") : tr("Search"));
-	fQueryButton->setEnabled(fConnection.IsConnected());
-	fQueryField->setEnabled(fConnection.IsConnected());
+	fQueryButton->setEnabled(fConnections.IsAnyConnected());
+	fQueryField->setEnabled(fConnections.IsAnyConnected());
 }
 
 
@@ -1821,12 +2010,12 @@ void
 MainWindow::_UpdateResultCount()
 {
 	const int count = fResultsModel->rowCount();
-	if (count == 0 && fConnection.IsQueryActive() == false) {
+	if (count == 0 && fConnections.IsAnyQueryActive() == false) {
 		fResultCountLabel->clear();
 		return;
 	}
 
-	fResultCountLabel->setText(fConnection.IsQueryActive()
+	fResultCountLabel->setText(fConnections.IsAnyQueryActive()
 		? tr("%n result(s), still listening", "", count)
 		: tr("%n result(s)", "", count));
 }
@@ -1835,7 +2024,9 @@ MainWindow::_UpdateResultCount()
 void
 MainWindow::_UpdateConnectionWidgets()
 {
-	const ConnectionState state = fConnection.GetConnectionState();
+	const ServerConnection* primary = _Primary();
+	const ConnectionState state = (primary != nullptr)
+		? primary->GetConnectionState() : CONNECTION_DISCONNECTED;
 	const bool isDisconnected = (state == CONNECTION_DISCONNECTED);
 
 	fConnectButton->setText(isDisconnected ? tr("Connect") : tr("Disconnect"));
@@ -1852,19 +2043,27 @@ MainWindow::_UpdateConnectionWidgets()
 void
 MainWindow::_UpdateStatusBar()
 {
-	switch (fConnection.GetConnectionState()) {
+	const ServerConnection* statusConnection = _Primary();
+	const ConnectionState statusState = (statusConnection != nullptr)
+		? statusConnection->GetConnectionState() : CONNECTION_DISCONNECTED;
+	const QString statusAddress = (statusConnection != nullptr)
+		? ToQString(statusConnection->GetServerAddress()) : QString();
+
+	switch (statusState) {
 		case CONNECTION_DISCONNECTED:
 			fStatusLabel->setText(tr("Not connected"));
 			break;
 
 		case CONNECTION_CONNECTING:
-			fStatusLabel->setText(tr("Connecting to %1...")
-				.arg(ToQString(fConnection.GetServerAddress())));
+			fStatusLabel->setText(tr("Connecting to %1...").arg(statusAddress));
 			break;
 
 		case CONNECTION_CONNECTED:
-			fStatusLabel->setText(tr("Connected to %1")
-				.arg(ToQString(fConnection.GetServerAddress())));
+			// With several servers the count matters more than any one name.
+			fStatusLabel->setText(fConnections.GetConnectedCount() > 1
+				? tr("Connected to %n server(s)", "",
+					(int) fConnections.GetConnectedCount())
+				: tr("Connected to %1").arg(statusAddress));
 			break;
 	}
 
@@ -1882,8 +2081,8 @@ MainWindow::_UpdateStatusBar()
 
 	fShareLabel->setText(shareText);
 
-	const uint32 userCount = fConnection.GetUsers().GetUserCount();
-	fUserCountLabel->setText(fConnection.IsConnected()
+	const uint32 userCount = fConnections.GetTotalUserCount();
+	fUserCountLabel->setText(fConnections.IsAnyConnected()
 		? tr("%n user(s)", "", (int) userCount) : QString());
 }
 
@@ -1893,13 +2092,19 @@ MainWindow::_GetCompletionCandidates(const QString& prefix) const
 {
 	QStringList candidates;
 
-	const Hashtable<muscle::String, UserRecord>& users
-		= fConnection.GetUsers().GetUsers();
-	for (auto iterator = users.GetIterator(); iterator.HasData(); iterator++) {
-		const QString userName = ToQString(iterator.GetValue().userName);
-		if (userName.isEmpty() == false
-				&& userName.startsWith(prefix, Qt::CaseInsensitive)) {
-			candidates.append(userName);
+	for (uint32 i = 0; i < fConnections.GetCount(); i++) {
+		const Hashtable<muscle::String, UserRecord>& users
+			= fConnections.GetAt(i)->GetUsers().GetUsers();
+		for (auto iterator = users.GetIterator(); iterator.HasData();
+				iterator++) {
+			const QString userName = ToQString(iterator.GetValue().userName);
+			// The same person on two servers is two entries, but completing
+			// their name twice would be silly.
+			if (userName.isEmpty() == false
+					&& userName.startsWith(prefix, Qt::CaseInsensitive)
+					&& candidates.contains(userName) == false) {
+				candidates.append(userName);
+			}
 		}
 	}
 
@@ -1911,7 +2116,7 @@ MainWindow::_GetCompletionCandidates(const QString& prefix) const
 bool
 MainWindow::_MentionsLocalUser(const muscle::String& text) const
 {
-	const QString localName = ToQString(fConnection.GetLocalUserName()).trimmed();
+	const QString localName = ToQString(fSettings.GetUserName()).trimmed();
 	if (localName.isEmpty())
 		return false;
 
@@ -2005,8 +2210,8 @@ MainWindow::closeEvent(QCloseEvent* event)
 	fUploadServer.SetListener(nullptr);
 	fShareScanner.StopScan();
 	fUploadServer.StopListening();
-	fConnection.SetListener(nullptr);
-	fConnection.DisconnectFromServer();
+	fConnections.SetListener(nullptr);
+	fConnections.DisconnectAll();
 
 	QMainWindow::closeEvent(event);
 }

@@ -9,6 +9,7 @@ add_library(hitux-core STATIC
     ChatAliases.cpp
     ChatCommandParser.cpp
     ChatLogger.cpp
+    ConnectionManager.cpp
     DownloadManager.cpp
     FileDownload.cpp
     FileUploadServer.cpp

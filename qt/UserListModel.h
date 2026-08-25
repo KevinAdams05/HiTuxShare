@@ -38,6 +38,7 @@ public:
 		COLUMN_STATUS,
 		COLUMN_CLIENT,
 		COLUMN_FILES,
+		COLUMN_SERVER,
 		COLUMN_HOST,
 
 		COLUMN_COUNT
@@ -59,12 +60,16 @@ public:
 	/** Inserts or refreshes a user.
 	  * @param user the user's current state
 	  */
-	void UpdateUser(const UserRecord& user);
+	void UpdateUser(const void* connection, const QString& serverName,
+		const UserRecord& user);
 
 	/** Removes a user, if present.
 	  * @param sessionId the session that left
 	  */
-	void RemoveUser(const muscle::String& sessionId);
+	void RemoveUser(const void* connection, const muscle::String& sessionId);
+
+	/** Drops every user belonging to one connection, e.g. on disconnect. */
+	void RemoveUsersForConnection(const void* connection);
 
 	/** Drops every user, as happens on disconnect. */
 	void Clear();
@@ -75,10 +80,27 @@ public:
 	QString GetSessionIdForRow(int row) const;
 
 private:
-	int _FindRowForSessionId(const QString& sessionId) const;
+	/** A user together with the server they are on.
+	  *
+	  * Keyed by both, because a session ID is only unique within one server:
+	  * session 5 on two servers is two unrelated people, and keying by the ID
+	  * alone would have them overwrite each other.
+	  */
+	struct Entry
+	{
+		Entry() : connection(nullptr) {}
 
-	QVector<UserRecord> fUsers;
-	QHash<QString, int> fRowsBySessionId;
+		UserRecord user;
+		const void* connection;
+		QString serverName;
+	};
+
+	static QString _MakeKey(const void* connection, const QString& sessionId);
+	int _FindRow(const void* connection, const QString& sessionId) const;
+	void _RebuildIndex();
+
+	QVector<Entry> fUsers;
+	QHash<QString, int> fRowsByKey;
 };
 
 

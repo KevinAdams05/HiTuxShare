@@ -43,7 +43,8 @@ UserListModel::data(const QModelIndex& index, int role) const
 	if (index.isValid() == false || index.row() >= fUsers.size())
 		return QVariant();
 
-	const UserRecord& user = fUsers.at(index.row());
+	const Entry& entry = fUsers.at(index.row());
+	const UserRecord& user = entry.user;
 
 	if (role == kSessionIdRole)
 		return ToQString(user.sessionId);
@@ -81,6 +82,9 @@ UserListModel::data(const QModelIndex& index, int role) const
 			// the underlying QVariant, not the rendered string.
 			return QVariant((qulonglong) user.fileCount);
 
+		case COLUMN_SERVER:
+			return entry.serverName;
+
 		case COLUMN_HOST:
 			return ToQString(user.hostName);
 
@@ -109,6 +113,9 @@ UserListModel::headerData(int section, Qt::Orientation orientation, int role) co
 		case COLUMN_FILES:
 			return tr("Files");
 
+		case COLUMN_SERVER:
+			return tr("Server");
+
 		case COLUMN_HOST:
 			return tr("Host");
 
@@ -119,13 +126,19 @@ UserListModel::headerData(int section, Qt::Orientation orientation, int role) co
 
 
 void
-UserListModel::UpdateUser(const UserRecord& user)
+UserListModel::UpdateUser(const void* connection, const QString& serverName,
+	const UserRecord& user)
 {
 	const QString sessionId = ToQString(user.sessionId);
-	const int existingRow = _FindRowForSessionId(sessionId);
+	const int existingRow = _FindRow(connection, sessionId);
+
+	Entry entry;
+	entry.user = user;
+	entry.connection = connection;
+	entry.serverName = serverName;
 
 	if (existingRow >= 0) {
-		fUsers[existingRow] = user;
+		fUsers[existingRow] = entry;
 		emit dataChanged(index(existingRow, 0),
 			index(existingRow, COLUMN_COUNT - 1));
 		return;
@@ -133,34 +146,47 @@ UserListModel::UpdateUser(const UserRecord& user)
 
 	const int newRow = fUsers.size();
 	beginInsertRows(QModelIndex(), newRow, newRow);
-	fUsers.append(user);
-	fRowsBySessionId.insert(sessionId, newRow);
+	fUsers.append(entry);
+	fRowsByKey.insert(_MakeKey(connection, sessionId), newRow);
 	endInsertRows();
 }
 
 
 void
-UserListModel::RemoveUser(const muscle::String& sessionId)
+UserListModel::RemoveUser(const void* connection, const muscle::String& sessionId)
 {
-	const QString sessionIdString = ToQString(sessionId);
-	const int row = _FindRowForSessionId(sessionIdString);
+	const int row = _FindRow(connection, ToQString(sessionId));
 	if (row < 0)
 		return;
 
 	beginRemoveRows(QModelIndex(), row, row);
 	fUsers.remove(row);
-	fRowsBySessionId.remove(sessionIdString);
 
-	// Every row after the removed one shifted down by one, so the lookup table has to
-	// be rebuilt rather than patched -- getting this wrong is how a user list starts
-	// addressing the wrong person.
-	for (auto iterator = fRowsBySessionId.begin();
-			iterator != fRowsBySessionId.end(); ++iterator) {
-		if (iterator.value() > row)
-			iterator.value() = iterator.value() - 1;
+	// Every row after the removed one shifted down, so the lookup table is
+	// rebuilt rather than patched -- getting this wrong is how a user list
+	// starts addressing the wrong person.
+	_RebuildIndex();
+	endRemoveRows();
+}
+
+
+void
+UserListModel::RemoveUsersForConnection(const void* connection)
+{
+	QVector<Entry> kept;
+	kept.reserve(fUsers.size());
+	for (const Entry& entry : fUsers) {
+		if (entry.connection != connection)
+			kept.append(entry);
 	}
 
-	endRemoveRows();
+	if (kept.size() == fUsers.size())
+		return;
+
+	beginResetModel();
+	fUsers = kept;
+	_RebuildIndex();
+	endResetModel();
 }
 
 
@@ -172,7 +198,7 @@ UserListModel::Clear()
 
 	beginResetModel();
 	fUsers.clear();
-	fRowsBySessionId.clear();
+	fRowsByKey.clear();
 	endResetModel();
 }
 
@@ -183,15 +209,35 @@ UserListModel::GetSessionIdForRow(int row) const
 	if (row < 0 || row >= fUsers.size())
 		return QString();
 
-	return ToQString(fUsers.at(row).sessionId);
+	return ToQString(fUsers.at(row).user.sessionId);
+}
+
+
+QString
+UserListModel::_MakeKey(const void* connection, const QString& sessionId)
+{
+	return QString::number(reinterpret_cast<quintptr>(connection))
+		+ QChar('\n') + sessionId;
 }
 
 
 int
-UserListModel::_FindRowForSessionId(const QString& sessionId) const
+UserListModel::_FindRow(const void* connection, const QString& sessionId) const
 {
-	const auto iterator = fRowsBySessionId.constFind(sessionId);
-	return (iterator != fRowsBySessionId.constEnd()) ? iterator.value() : -1;
+	const auto iterator = fRowsByKey.constFind(_MakeKey(connection, sessionId));
+	return (iterator != fRowsByKey.constEnd()) ? iterator.value() : -1;
+}
+
+
+void
+UserListModel::_RebuildIndex()
+{
+	fRowsByKey.clear();
+	fRowsByKey.reserve(fUsers.size());
+	for (int row = 0; row < fUsers.size(); row++) {
+		fRowsByKey.insert(_MakeKey(fUsers[row].connection,
+			ToQString(fUsers[row].user.sessionId)), row);
+	}
 }
 
 

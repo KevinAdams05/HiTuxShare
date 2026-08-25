@@ -43,6 +43,7 @@ const char* const kFieldMaxUploadRate = "maxuploadrate";
 const char* const kFieldFirewalled = "firewalled";
 const char* const kFieldAutoClear = "autoclear";
 const char* const kFieldChatFontPointSize = "chatfontsize";
+const char* const kFieldExtraServers = "extraserver";
 const char* const kFieldAutoUpdateServers = "autoupdateservers";
 const char* const kFieldRecentUserNames = "usernamelist";
 const char* const kFieldRecentStatuses = "userstatuslist";
@@ -321,6 +322,20 @@ void
 ApplicationSettings::RememberServer(const String& serverAddress)
 {
 	_RememberInList(kFieldServerList, serverAddress, kMaximumRememberedServers);
+}
+
+
+Queue<String>
+ApplicationSettings::GetExtraServers() const
+{
+	return _GetStringList(kFieldExtraServers);
+}
+
+
+void
+ApplicationSettings::SetExtraServers(const Queue<String>& servers)
+{
+	_SetStringList(kFieldExtraServers, servers);
 }
 
 

@@ -16,9 +16,6 @@
 namespace hitux {
 
 
-class UserRegistry;
-
-
 /** Query results, as a Qt model.
   *
   * Sized for the real case rather than the demo one: a bare "*" against a peer
@@ -39,11 +36,32 @@ public:
 		COLUMN_NAME = 0,
 		COLUMN_SIZE,
 		COLUMN_USER,
+		COLUMN_SERVER,
 		COLUMN_MODIFIED,
 		COLUMN_KIND,
 		COLUMN_PATH,
 
 		COLUMN_COUNT
+	};
+
+	/** One result together with where it came from.
+	  *
+	  * The server is part of a result's identity, not decoration: the same file
+	  * name from the same session ID on two different servers is two unrelated
+	  * files, and a download has to go back to the right one.
+	  */
+	struct Entry
+	{
+		Entry() : connection(nullptr) {}
+
+		FileResult result;
+
+		// Opaque here on purpose -- the model does not need to know what a
+		// ServerConnection is, only that rows from different ones differ.
+		const void* connection;
+
+		QString serverName;
+		QString sharerName;
 	};
 
 	// Raw comparable value, so Size and Modified sort by magnitude rather than
@@ -64,13 +82,13 @@ public:
 	/** Adds or refreshes a batch of results in one model transaction.
 	  * @param results the results to add
 	  */
-	void AddResults(const QVector<FileResult>& results);
+	void AddResults(const QVector<Entry>& entries);
 
 	/** Removes one result, if present.
 	  * @param sessionId who was sharing it
 	  * @param fileName the file that went away
 	  */
-	void RemoveResult(const muscle::String& sessionId,
+	void RemoveResult(const void* connection, const muscle::String& sessionId,
 		const muscle::String& fileName);
 
 	/** Removes every result belonging to one user, as one operation.
@@ -80,29 +98,31 @@ public:
 	  *
 	  * @param sessionId the user who left
 	  */
-	void RemoveResultsForSession(const muscle::String& sessionId);
+	void RemoveResultsForSession(const void* connection,
+		const muscle::String& sessionId);
+
+	/** Drops every row belonging to one connection, e.g. when it disconnects. */
+	void RemoveResultsForConnection(const void* connection);
 
 	void Clear();
 
-	/** Supplies the registry used to render the User column, so results can show
-	  * a name rather than a session ID. Not owned.
-	  * @param users the connection's user registry
+	/** Replaces the displayed sharer name wherever it is now known.
+	  * @param connection which server the user belongs to
+	  * @param sessionId the user
+	  * @param displayName their current name
 	  */
-	void SetUserRegistry(const UserRegistry* users) { fUsers = users; }
+	void UpdateSharerName(const void* connection, const muscle::String& sessionId,
+		const QString& displayName);
 
-	/** Refreshes the User column after a rename or a join. */
-	void RefreshUserNames();
-
-	const FileResult* GetResultForRow(int row) const;
+	const Entry* GetEntryForRow(int row) const;
 
 private:
-	static QString _MakeKey(const muscle::String& sessionId,
-		const muscle::String& fileName);
+	static QString _MakeKey(const void* connection,
+		const muscle::String& sessionId, const muscle::String& fileName);
 	void _RebuildIndex();
 
-	QVector<FileResult> fResults;
+	QVector<Entry> fResults;
 	QHash<QString, int> fRowsByKey;
-	const UserRegistry* fUsers;
 };
 
 

@@ -97,7 +97,7 @@ ServerConnection::DisconnectFromServer()
 	fQueryActive = false;
 
 	if (fListener != NULL)
-		fListener->QueryResultsCleared();
+		fListener->QueryResultsCleared(this);
 
 	if (wasActive) {
 		_ReportToUser(LOG_INFORMATION_MESSAGE, "Disconnected from server.");
@@ -215,7 +215,7 @@ ServerConnection::StartQuery(const String& sessionExpression,
 		? fileExpression : String("*"));
 
 	if (fListener != NULL)
-		fListener->QuerySweepStateChanged(true);
+		fListener->QuerySweepStateChanged(this, true);
 }
 
 
@@ -249,8 +249,8 @@ ServerConnection::StopQuery()
 	}
 
 	if (fListener != NULL) {
-		fListener->QueryResultsCleared();
-		fListener->QuerySweepStateChanged(false);
+		fListener->QueryResultsCleared(this);
+		fListener->QuerySweepStateChanged(this, false);
 	}
 }
 
@@ -455,7 +455,7 @@ ServerConnection::MessageReceived(const MessageRef& messageRef,
 			int32 count = 0;
 			if (message->FindInt32("count", count).IsOK()
 					&& count >= fPingCount - 1 && fListener != NULL) {
-				fListener->QuerySweepStateChanged(false);
+				fListener->QuerySweepStateChanged(this, false);
 			}
 			break;
 		}
@@ -538,7 +538,7 @@ ServerConnection::_HandleNodeRemoved(const String& nodePath)
 		const char* fileNameClause = GetPathClause(FILE_INFO_DEPTH, nodePath());
 		const String sessionId = _ExtractSessionId(nodePath);
 		if (fileNameClause != NULL && sessionId.HasChars() && fListener != NULL)
-			fListener->QueryResultRemoved(sessionId, fileNameClause);
+			fListener->QueryResultRemoved(this, sessionId, fileNameClause);
 
 		return;
 	}
@@ -555,7 +555,7 @@ ServerConnection::_HandleNodeRemoved(const String& nodePath)
 		return;
 
 	if (fListener != NULL)
-		fListener->UserLeft(departedUser);
+		fListener->UserLeft(this, departedUser);
 }
 
 
@@ -744,7 +744,7 @@ ServerConnection::_HandleFileNode(const String& sessionId, const String& nodePat
 	(void) inflated()->FindString(BESHARE_FIELD_KIND, result.kind);
 
 	if (fListener != NULL)
-		fListener->QueryResultAdded(result);
+		fListener->QueryResultAdded(this, result);
 }
 
 
@@ -778,7 +778,7 @@ ServerConnection::_HandleChatText(const Message& message)
 	}
 
 	if (fListener != NULL)
-		fListener->ChatMessageReceived(chatMessage);
+		fListener->ChatMessageReceived(this, chatMessage);
 }
 
 
@@ -843,7 +843,7 @@ ServerConnection::_HandlePong(const Message& message)
 	const uint64 roundTrip = GetRunTime64() - (uint64) sentAt;
 
 	if (fListener != NULL)
-		fListener->PingReplyReceived(*user, roundTrip, peerVersion);
+		fListener->PingReplyReceived(this, *user, roundTrip, peerVersion);
 }
 
 
@@ -866,7 +866,7 @@ ServerConnection::_HandleParameters(const Message& message)
 	fHasPublishedIdentity = true;
 
 	if (fListener != NULL)
-		fListener->LocalSessionIdAssigned(fLocalSessionId, serverHostName);
+		fListener->LocalSessionIdAssigned(this, fLocalSessionId, serverHostName);
 }
 
 
@@ -962,7 +962,7 @@ ServerConnection::_SetConnectionState(ConnectionState state)
 
 	fConnectionState = state;
 	if (fListener != NULL)
-		fListener->ConnectionStateChanged(state);
+		fListener->ConnectionStateChanged(this, state);
 }
 
 
@@ -972,7 +972,7 @@ ServerConnection::_ReportToUser(LogMessageType type, const String& text)
 	if (fListener == NULL)
 		return;
 
-	fListener->ChatMessageReceived(ChatMessage(type, text));
+	fListener->ChatMessageReceived(this, ChatMessage(type, text));
 }
 
 
@@ -983,7 +983,7 @@ ServerConnection::_NotifyUserUpdated(const String& sessionId, bool isNewUser)
 	if (user == NULL || fListener == NULL)
 		return;
 
-	fListener->UserUpdated(*user, isNewUser);
+	fListener->UserUpdated(this, *user, isNewUser);
 }
 
 

@@ -551,6 +551,27 @@ are written down next to them.
   `"beshare:File Name"`, and the doc omitted that there is no end-of-file message at all. Written
   from reading the source; corrected from making it work.
 
+### Deliberately not implemented
+
+Recorded so nobody has to rediscover why:
+
+- **Resuming an interrupted download, and saved transfers across restarts.**
+  Resume needs the partial-MD5 handshake (hash the first 64 KB of the local
+  partial file, compare with the uploader, gated on their
+  `supports_partial_hashing` flag). Saving transfers across restarts only makes
+  sense once resume works, since a restored transfer that restarts from zero is
+  worse than no restore at all.
+- **Advertised bandwidth and auto-detect connection speed.** HiShare publishes a
+  `beshare/bandwidth` node and can measure the real rate during transfers. We
+  read the field from peers and show it, but publish nothing. It is cosmetic on
+  a LAN and a guess on anything else.
+- **Shortest-uploads-first queue policy.** Our upload queue is FIFO. Serving the
+  smallest request first is fairer under load but needs the queue to know each
+  request's total size before starting, which it currently does not.
+- **Custom colour schemes.** Deliberately kept as-is: colours are derived from
+  the system palette, so light and dark both work and the app matches the
+  desktop. A private colour scheme would be a step backwards.
+
 **Open questions for you**
 
 1. **Qt 6 or GTK4?** My recommendation is Qt 6 — MUSCLE's shipped Qt integration and `QTreeView` are

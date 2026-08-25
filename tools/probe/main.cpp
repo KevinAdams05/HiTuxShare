@@ -54,7 +54,8 @@ public:
 	bool ShouldQuit() const { return fShouldQuit; }
 	void RequestQuit() { fShouldQuit = true; }
 
-	virtual void ConnectionStateChanged(ConnectionState state)
+	virtual void ConnectionStateChanged(ServerConnection* /*connection*/,
+		ConnectionState state)
 	{
 		switch (state) {
 			case CONNECTION_DISCONNECTED:
@@ -77,8 +78,8 @@ public:
 	bool ShouldStartScan() const { return fShouldStartScan; }
 	void ClearStartScan() { fShouldStartScan = false; }
 
-	virtual void LocalSessionIdAssigned(const String& sessionId,
-		const String& /*hostName*/)
+	virtual void LocalSessionIdAssigned(ServerConnection* /*connection*/,
+		const String& sessionId, const String& /*hostName*/)
 	{
 		fShouldStartScan = true;
 		// Deliberately not printing the hostName the server reports: that is the
@@ -88,7 +89,8 @@ public:
 		fflush(stdout);
 	}
 
-	virtual void UserUpdated(const UserRecord& user, bool isNewUser)
+	virtual void UserUpdated(ServerConnection* /*connection*/,
+		const UserRecord& user, bool isNewUser)
 	{
 		if (isNewUser == false)
 			return;
@@ -101,13 +103,15 @@ public:
 		fflush(stdout);
 	}
 
-	virtual void UserLeft(const UserRecord& user)
+	virtual void UserLeft(ServerConnection* /*connection*/,
+		const UserRecord& user)
 	{
 		printf("*** (%s) %s left.\n", user.sessionId(), user.GetDisplayName()());
 		fflush(stdout);
 	}
 
-	virtual void ChatMessageReceived(const ChatMessage& message)
+	virtual void ChatMessageReceived(ServerConnection* /*connection*/,
+		const ChatMessage& message)
 	{
 		const char* privateMarker = message.isPrivate ? "[PRIVATE] " : "";
 
@@ -122,7 +126,8 @@ public:
 		fflush(stdout);
 	}
 
-	virtual void QueryResultAdded(const FileResult& result)
+	virtual void QueryResultAdded(ServerConnection* /*connection*/,
+		const FileResult& result)
 	{
 		(void) fResults.AddTail(result);
 
@@ -137,7 +142,8 @@ public:
 		fResultCount++;
 	}
 
-	virtual void QueryResultRemoved(const String& sessionId, const String& fileName)
+	virtual void QueryResultRemoved(ServerConnection* /*connection*/,
+		const String& sessionId, const String& fileName)
 	{
 		printf("  -- %s (from %s) is no longer shared\n", fileName(), sessionId());
 		fflush(stdout);
@@ -145,7 +151,7 @@ public:
 			fResultCount--;
 	}
 
-	virtual void QueryResultsCleared()
+	virtual void QueryResultsCleared(ServerConnection* /*connection*/)
 	{
 		fResultCount = 0;
 		fResults.Clear();
@@ -219,7 +225,8 @@ public:
 		fflush(stdout);
 	}
 
-	virtual void QuerySweepStateChanged(bool isSweeping)
+	virtual void QuerySweepStateChanged(ServerConnection* /*connection*/,
+		bool isSweeping)
 	{
 		printf(isSweeping
 			? "*** Searching...\n"
@@ -245,8 +252,9 @@ public:
 		fflush(stdout);
 	}
 
-	virtual void PingReplyReceived(const UserRecord& user,
-		uint64 roundTripMicroseconds, const String& peerVersion)
+	virtual void PingReplyReceived(ServerConnection* /*connection*/,
+		const UserRecord& user, uint64 roundTripMicroseconds,
+		const String& peerVersion)
 	{
 		printf("*** Ping reply from %s: %llu ms%s%s\n", user.GetDisplayName()(),
 			(unsigned long long) (roundTripMicroseconds / 1000),
