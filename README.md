@@ -15,16 +15,17 @@ modernized edition of Jeremy Friesner's BeShare — speaking the same
 
 ## Status
 
-**Phases 1 and 2 are working** — chat, live file search, and peer-to-peer
-downloads. Verified against both a private local `muscled` and the live public
-network, including real files pulled from a Haiku peer running BeShare 3.04.
+**Phases 1 to 3 are working** — chat, live file search, downloads, and sharing
+your own files for other people to download. Verified against both a private
+`muscled` and the live public network, including real files pulled from a Haiku
+peer running BeShare 3.04.
 
 | Phase | State |
 |---|---|
 | 0 — Protocol proof (`hitux-probe`) | **Done** |
 | 1 — Chat | **Working**; private-message tabs and `/ignore` still to come |
 | 2 — Downloading | **Working**; resume and connect-back still to come |
-| 3 — Sharing | Not started |
+| 3 — Sharing | **Working**; live folder watching and NAT traversal still to come |
 | 4 — Polish, i18n, packaging | Not started |
 
 What works today: connect and reconnect, a remembered server dropdown, live user
@@ -41,9 +42,21 @@ choose are sanitised before they go anywhere near the filesystem.
 
 ![Downloading from a Haiku peer](docs/screenshots/hitux-download.png)
 
+**Sharing** publishes a folder you choose and serves it to peers directly. The scan
+runs on a background thread, so a folder with thousands of files does not freeze the
+window, and one connection carries however many files a peer asked for.
+
+Note that the protocol identifies a shared file by its **name alone**, with the
+directory carried separately — so the same file name in two sub-folders is one entry
+as far as the network is concerned. HiTuxShare keeps the first and tells you how many
+it skipped rather than silently publishing an arbitrary one.
+
+![Sharing files with a peer downloading](docs/screenshots/hitux-sharing.png)
+
 Not yet implemented, and not pretended otherwise: resuming an interrupted download,
-downloading from a firewalled peer (that needs connect-back), byte-range requests,
-and bandwidth limiting.
+transferring with a firewalled peer (that needs connect-back), byte-range requests,
+bandwidth limiting, NAT traversal (UPnP/NAT-PMP), and watching the share folder for
+changes while running — the scan happens when you connect.
 
 ## Build
 

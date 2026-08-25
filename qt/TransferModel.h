@@ -6,6 +6,7 @@
 #define TRANSFER_MODEL_H
 
 
+#include "core/FileUploadServer.h"
 #include "support/MuscleSupport.h"
 
 #include <QAbstractTableModel>
@@ -50,6 +51,13 @@ public:
 	  */
 	explicit TransferModel(const DownloadManager* downloads,
 		QObject* parent = nullptr);
+
+	/** Supplies the upload server, so people downloading from us appear in the
+	  * same list as our own downloads -- which is what BeShare shows and what
+	  * anyone watching a transfer list actually wants to know.
+	  * @param uploads the server; not owned, must outlive us
+	  */
+	void SetUploadServer(const FileUploadServer* uploads);
 	~TransferModel() override;
 
 	int rowCount(const QModelIndex& parent = QModelIndex()) const override;
@@ -67,7 +75,11 @@ public:
 	void NotifyRowChanged(uint32 index);
 
 private:
+	static QVariant _UploadData(
+		const class FileUploadServer::UploadStatus& upload, int column, int role);
+
 	const DownloadManager* fDownloads;
+	const FileUploadServer* fUploads;
 };
 
 

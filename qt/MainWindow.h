@@ -8,6 +8,8 @@
 
 #include "core/ApplicationSettings.h"
 #include "core/DownloadManager.h"
+#include "core/FileUploadServer.h"
+#include "core/ShareScanner.h"
 #include "core/ServerConnection.h"
 #include "core/ServerConnectionListener.h"
 
@@ -47,7 +49,7 @@ class UserListModel;
   * is the whole reason MUSCLE's Qt integration is worth using.
   */
 class MainWindow : public QMainWindow, public ServerConnectionListener,
-	public DownloadManagerListener
+	public DownloadManagerListener, public FileUploadServerListener
 {
 	Q_OBJECT
 
@@ -75,6 +77,10 @@ public:
 	void DownloadChanged(uint32 index) override;
 	void DownloadReport(LogMessageType type, const muscle::String& text) override;
 
+	// FileUploadServerListener
+	void UploadsChanged(FileUploadServer* server) override;
+	void UploadReport(LogMessageType type, const muscle::String& text) override;
+
 protected:
 	void closeEvent(QCloseEvent* event) override;
 
@@ -90,6 +96,8 @@ private slots:
 	void _OnQueryButtonClicked();
 	void _OnQueryFieldReturnPressed();
 	void _OnFlushPendingResults();
+	void _OnChooseShareFolder();
+	void _OnToggleFileSharing(bool enabled);
 	void _OnShowAbout();
 	void _OnToggleTimestamps(bool showTimestamps);
 
@@ -115,6 +123,9 @@ private:
 	void _PopulateServerList();
 	QString _GetSelectedServerAddress() const;
 	void _UpdateStatusBar();
+	void _StartSharing();
+	void _StopSharing();
+	void _DrainShareScanner();
 
 	QStringList _GetCompletionCandidates(const QString& prefix) const;
 
@@ -151,11 +162,13 @@ private:
 
 	QLabel* fStatusLabel;
 	QLabel* fUserCountLabel;
+	QLabel* fShareLabel;
 
 	QAction* fConnectAction;
 	QAction* fDisconnectAction;
 	QAction* fShowTimestampsAction;
 	QAction* fShowHostColumnAction;
+	QAction* fFileSharingAction;
 
 	QTimer* fIdleTimer;
 
@@ -166,8 +179,13 @@ private:
 	QTimer* fResultFlushTimer;
 	bool fUserNamesDirty;
 
-	// Declared last so it is destroyed first: its downloads call back into us.
+	// Declared last so they are destroyed first: all three call back into us.
 	DownloadManager fDownloads;
+	ShareScanner fShareScanner;
+	FileUploadServer fUploadServer;
+
+	muscle::Hashtable<muscle::String, SharedFile> fSharedFiles;
+	uint32 fSharedFileCount;
 };
 
 

@@ -90,6 +90,26 @@ public:
 
 	uint32 GetActiveUploadCount() const { return fPeers.GetNumItems(); }
 
+	/** A snapshot of one peer's upload, for display.
+	  *
+	  * Returned by value rather than by pointer into the peer table: the table
+	  * changes as peers come and go, and a view holding a pointer into it would
+	  * be reading freed memory the moment somebody disconnects.
+	  */
+	struct UploadStatus
+	{
+		UploadStatus() : fileSize(0), bytesSent(0), isSending(false) {}
+
+		muscle::String peerName;
+		muscle::String fileName;
+		int64 fileSize;
+		int64 bytesSent;
+		bool isSending;
+	};
+
+	/** Returns what every connected peer is currently getting from us. */
+	muscle::Queue<UploadStatus> GetUploadStatuses() const;
+
 	/** Our own identity, sent to peers so they can show who is serving them.
 	  * @param sessionId our session ID on the server
 	  * @param userName our name

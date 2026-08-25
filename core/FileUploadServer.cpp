@@ -52,6 +52,28 @@ FileUploadServer::SetSharedFiles(const Hashtable<String, SharedFile>& files)
 }
 
 
+Queue<FileUploadServer::UploadStatus>
+FileUploadServer::GetUploadStatuses() const
+{
+	Queue<UploadStatus> statuses;
+
+	for (auto iterator = fPeers.GetIterator(); iterator.HasData(); iterator++) {
+		const PeerUpload& peer = iterator.GetValue();
+
+		UploadStatus status;
+		status.peerName = peer.remoteUserName.HasChars()
+			? peer.remoteUserName : peer.peerAddress;
+		status.fileName = peer.currentFileName;
+		status.fileSize = peer.currentFileSize;
+		status.bytesSent = peer.bytesSent;
+		status.isSending = (peer.currentFile != NULL);
+		(void) statuses.AddTail(status);
+	}
+
+	return statuses;
+}
+
+
 void
 FileUploadServer::SetLocalIdentity(const String& sessionId, const String& userName)
 {

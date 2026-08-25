@@ -6,6 +6,7 @@
 #include "qt/TransferModel.h"
 
 #include "core/DownloadManager.h"
+#include "core/FileUploadServer.h"
 #include "core/FormatUtilities.h"
 #include "qt/QtConversions.h"
 
@@ -57,11 +58,67 @@ DescribeState(const FileDownload& download)
 }  // unnamed namespace
 
 
+QVariant
+TransferModel::_UploadData(const FileUploadServer::UploadStatus& upload,
+	int column, int role)
+{
+	if (role == kProgressRole) {
+		if (upload.fileSize <= 0)
+			return 0;
+
+		return (int) qBound<int64>(0,
+			(upload.bytesSent * 100) / upload.fileSize, (int64) 100);
+	}
+
+	if (role != Qt::DisplayRole)
+		return QVariant();
+
+	switch (column) {
+		case TransferModel::COLUMN_FILE:
+			return upload.fileName.HasChars()
+				? ToQString(upload.fileName) : QObject::tr("(waiting)");
+
+		case TransferModel::COLUMN_PROGRESS:
+			return (upload.fileSize > 0)
+				? QObject::tr("%1%").arg((upload.bytesSent * 100)
+					/ upload.fileSize) : QString();
+
+		case TransferModel::COLUMN_SIZE:
+			return ToQString(FormatByteSize(upload.fileSize));
+
+		case TransferModel::COLUMN_RATE:
+			return QString();
+
+		case TransferModel::COLUMN_FROM:
+			// Reads as a direction rather than a name, so an upload row cannot
+			// be mistaken for a download from the same person.
+			return QObject::tr("to %1").arg(ToQString(upload.peerName));
+
+		case TransferModel::COLUMN_STATUS:
+			return upload.isSending ? QObject::tr("Uploading")
+				: QObject::tr("Connected");
+
+		default:
+			return QVariant();
+	}
+}
+
+
 TransferModel::TransferModel(const DownloadManager* downloads, QObject* parent)
 	:
 	QAbstractTableModel(parent),
-	fDownloads(downloads)
+	fDownloads(downloads),
+	fUploads(nullptr)
 {
+}
+
+
+void
+TransferModel::SetUploadServer(const FileUploadServer* uploads)
+{
+	beginResetModel();
+	fUploads = uploads;
+	endResetModel();
 }
 
 
@@ -73,7 +130,12 @@ TransferModel::~TransferModel()
 int
 TransferModel::rowCount(const QModelIndex& parent) const
 {
-	return parent.isValid() ? 0 : (int) fDownloads->GetDownloadCount();
+	if (parent.isValid())
+		return 0;
+
+	const int uploadCount = (fUploads != nullptr)
+		? (int) fUploads->GetActiveUploadCount() : 0;
+	return (int) fDownloads->GetDownloadCount() + uploadCount;
 }
 
 
@@ -89,6 +151,21 @@ TransferModel::data(const QModelIndex& index, int role) const
 {
 	if (index.isValid() == false)
 		return QVariant();
+
+	// Downloads occupy the first rows, uploads the rest.
+	const int downloadCount = (int) fDownloads->GetDownloadCount();
+	if (index.row() >= downloadCount) {
+		if (fUploads == nullptr)
+			return QVariant();
+
+		const muscle::Queue<FileUploadServer::UploadStatus> uploads
+			= fUploads->GetUploadStatuses();
+		const uint32 uploadIndex = (uint32) (index.row() - downloadCount);
+		if (uploadIndex >= uploads.GetNumItems())
+			return QVariant();
+
+		return _UploadData(uploads[uploadIndex], index.column(), role);
+	}
 
 	const FileDownload* download
 		= fDownloads->GetDownloadAt((uint32) index.row());

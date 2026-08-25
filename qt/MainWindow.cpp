@@ -18,6 +18,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QFileDialog>
 #include <QComboBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -114,14 +115,18 @@ MainWindow::MainWindow(QWidget* parent)
 	fConnectButton(nullptr),
 	fStatusLabel(nullptr),
 	fUserCountLabel(nullptr),
+	fShareLabel(nullptr),
 	fConnectAction(nullptr),
 	fDisconnectAction(nullptr),
 	fShowTimestampsAction(nullptr),
 	fShowHostColumnAction(nullptr),
+	fFileSharingAction(nullptr),
 	fIdleTimer(nullptr),
 	fResultFlushTimer(nullptr),
 	fUserNamesDirty(false),
-	fDownloads(&fCallbackMechanism)
+	fDownloads(&fCallbackMechanism),
+	fUploadServer(&fCallbackMechanism),
+	fSharedFileCount(0)
 {
 	(void) fSettings.Load();
 
@@ -150,6 +155,8 @@ MainWindow::MainWindow(QWidget* parent)
 	fResultsModel->SetUserRegistry(&fConnection.GetUsers());
 
 	fDownloads.SetListener(this);
+	fUploadServer.SetListener(this);
+	fTransferModel->SetUploadServer(&fUploadServer);
 	fDownloads.SetDownloadDirectory(fSettings.GetDownloadDirectory());
 	fDownloads.SetRetainFilePaths(fSettings.GetRetainFilePaths());
 
@@ -415,6 +422,9 @@ MainWindow::_BuildUserInterface()
 	fStatusLabel = new QLabel(this);
 	statusBar()->addWidget(fStatusLabel, 1);
 
+	fShareLabel = new QLabel(this);
+	statusBar()->addPermanentWidget(fShareLabel);
+
 	fUserCountLabel = new QLabel(this);
 	statusBar()->addPermanentWidget(fUserCountLabel);
 
@@ -435,6 +445,16 @@ MainWindow::_BuildMenus()
 	fDisconnectAction = fileMenu->addAction(tr("&Disconnect"), this,
 		[this]() { fConnection.DisconnectFromServer(); });
 	fDisconnectAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+K")));
+
+	fileMenu->addSeparator();
+
+	fileMenu->addAction(tr("Choose &Share Folder..."), this,
+		&MainWindow::_OnChooseShareFolder);
+
+	fFileSharingAction = fileMenu->addAction(tr("Share my &files"));
+	fFileSharingAction->setCheckable(true);
+	connect(fFileSharingAction, &QAction::toggled,
+		this, &MainWindow::_OnToggleFileSharing);
 
 	fileMenu->addSeparator();
 
@@ -494,6 +514,7 @@ MainWindow::_LoadSettings()
 	bool showHostColumn = false;
 	(void) fSettings.GetRawMessage().FindBool(kSettingsFieldShowHostColumn,
 		showHostColumn);
+	fFileSharingAction->setChecked(fSettings.GetFileSharingEnabled());
 	fShowHostColumnAction->setChecked(showHostColumn);
 	fUserListView->setColumnHidden(UserListModel::COLUMN_HOST,
 		showHostColumn == false);
@@ -558,6 +579,9 @@ MainWindow::LocalSessionIdAssigned(const String& sessionId, const String& /*host
 
 	_AppendLocalLine(LOG_INFORMATION_MESSAGE,
 		tr("You are session %1.").arg(ToQString(sessionId)));
+
+	// Only now: sharing publishes under our session, so it needs one to exist.
+	_StartSharing();
 }
 
 
@@ -686,7 +710,153 @@ MainWindow::DownloadReport(LogMessageType type, const String& text)
 }
 
 
+void
+MainWindow::UploadsChanged(FileUploadServer* /*server*/)
+{
+	fTransferModel->NotifyListChanged();
+	_UpdateStatusBar();
+}
+
+
+void
+MainWindow::UploadReport(LogMessageType type, const String& text)
+{
+	_AppendLocalLine(type, ToQString(text));
+}
+
+
+// #pragma mark - Sharing
+
+
+void
+MainWindow::_StartSharing()
+{
+	if (fSettings.GetFileSharingEnabled() == false)
+		return;
+
+	const String shareDirectory = fSettings.GetShareDirectory();
+	if (shareDirectory.IsEmpty()) {
+		_AppendLocalLine(LOG_WARNING_MESSAGE,
+			tr("Choose a folder to share first (File menu)."));
+		return;
+	}
+
+	// Listen before publishing. A peer that reads our file list and connects
+	// back before we are accepting would simply be refused.
+	const uint16 listenPort = fUploadServer.StartListening(kDefaultTransferPort,
+		kTransferPortRange);
+	if (listenPort == 0) {
+		_AppendLocalLine(LOG_ERROR_MESSAGE,
+			tr("Could not listen on any port, so nobody can download from us."));
+	} else {
+		fUploadServer.SetLocalIdentity(fConnection.GetLocalSessionId(),
+			fConnection.GetLocalUserName());
+		fConnection.SetAdvertisedPort(listenPort);
+		_AppendLocalLine(LOG_INFORMATION_MESSAGE,
+			tr("Accepting downloads on port %1.").arg(listenPort));
+	}
+
+	fSharedFiles.Clear();
+	fSharedFileCount = 0;
+	fShareScanner.SetShareDirectory(shareDirectory);
+	fShareScanner.StartScan();
+
+	_AppendLocalLine(LOG_INFORMATION_MESSAGE,
+		tr("Scanning %1...").arg(ToQString(shareDirectory)));
+}
+
+
+void
+MainWindow::_StopSharing()
+{
+	fShareScanner.StopScan();
+	fUploadServer.StopListening();
+	fConnection.SetAdvertisedPort(0);
+	fConnection.UnpublishAllSharedFiles();
+	fConnection.PublishSharedFileCount(0);
+
+	fSharedFiles.Clear();
+	fSharedFileCount = 0;
+
+	fTransferModel->NotifyListChanged();
+	_UpdateStatusBar();
+}
+
+
+void
+MainWindow::_DrainShareScanner()
+{
+	// Publishing happens here rather than on the scanning thread: neither the
+	// connection nor the upload server is thread-safe, and the scan is
+	// deliberately allowed to run ahead of the network.
+	const Queue<SharedFile> discovered = fShareScanner.TakeDiscoveredFiles();
+	if (discovered.HasItems()) {
+		fConnection.PublishSharedFiles(discovered);
+		for (uint32 i = 0; i < discovered.GetNumItems(); i++)
+			(void) fSharedFiles.Put(discovered[i].fileName, discovered[i]);
+
+		fUploadServer.SetSharedFiles(fSharedFiles);
+		fSharedFileCount += discovered.GetNumItems();
+		_UpdateStatusBar();
+	}
+
+	if (fShareScanner.TakeScanFinished()) {
+		fConnection.PublishSharedFileCount(fSharedFileCount);
+
+		QString message = tr("Sharing %n file(s).", "", (int) fSharedFileCount);
+		const uint32 duplicates = fShareScanner.GetDuplicateNameCount();
+		if (duplicates > 0) {
+			message += QLatin1Char(' ') + tr("%n file(s) were skipped because "
+				"another file already had that name -- the protocol identifies "
+				"a shared file by its name alone.", "", (int) duplicates);
+		}
+
+		_AppendLocalLine(LOG_INFORMATION_MESSAGE, message);
+		_UpdateStatusBar();
+	}
+}
+
+
 // #pragma mark - Slots
+
+
+void
+MainWindow::_OnChooseShareFolder()
+{
+	const QString chosen = QFileDialog::getExistingDirectory(this,
+		tr("Choose a folder to share"),
+		ToQString(fSettings.GetShareDirectory()));
+	if (chosen.isEmpty())
+		return;
+
+	fSettings.SetShareDirectory(ToMuscleString(chosen));
+	_AppendLocalLine(LOG_INFORMATION_MESSAGE,
+		tr("Share folder set to %1.").arg(chosen));
+
+	if (fSettings.GetFileSharingEnabled() && fConnection.IsConnected()) {
+		_StopSharing();
+		_StartSharing();
+	}
+}
+
+
+void
+MainWindow::_OnToggleFileSharing(bool enabled)
+{
+	fSettings.SetFileSharingEnabled(enabled);
+
+	if (enabled == false) {
+		_StopSharing();
+		_AppendLocalLine(LOG_INFORMATION_MESSAGE, tr("File sharing is off."));
+		return;
+	}
+
+	if (fConnection.IsConnected())
+		_StartSharing();
+	else
+		_AppendLocalLine(LOG_INFORMATION_MESSAGE,
+			tr("File sharing will start when you connect."));
+}
 
 
 void
@@ -763,6 +933,7 @@ void
 MainWindow::_OnIdleTimerFired()
 {
 	fConnection.PerformIdleTasks();
+	_DrainShareScanner();
 }
 
 
@@ -1225,6 +1396,20 @@ MainWindow::_UpdateStatusBar()
 			break;
 	}
 
+	QString shareText;
+	if (fSharedFileCount > 0)
+		shareText = tr("Sharing %n file(s)", "", (int) fSharedFileCount);
+
+	const uint32 uploadCount = fUploadServer.GetActiveUploadCount();
+	if (uploadCount > 0) {
+		if (shareText.isEmpty() == false)
+			shareText += QLatin1String(" -- ");
+
+		shareText += tr("%n peer(s) downloading", "", (int) uploadCount);
+	}
+
+	fShareLabel->setText(shareText);
+
 	const uint32 userCount = fConnection.GetUsers().GetUserCount();
 	fUserCountLabel->setText(fConnection.IsConnected()
 		? tr("%n user(s)", "", (int) userCount) : QString());
@@ -1264,6 +1449,9 @@ MainWindow::closeEvent(QCloseEvent* event)
 	_SaveSettings();
 	fDownloads.SetListener(nullptr);
 	fDownloads.AbortAll();
+	fUploadServer.SetListener(nullptr);
+	fShareScanner.StopScan();
+	fUploadServer.StopListening();
 	fConnection.SetListener(nullptr);
 	fConnection.DisconnectFromServer();
 
