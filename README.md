@@ -26,7 +26,7 @@ peer running BeShare 3.04.
 | 1 — Chat | **Working**; private-message tabs and `/ignore` still to come |
 | 2 — Downloading | **Working**; resume and connect-back still to come |
 | 3 — Sharing | **Working**; live folder watching and NAT traversal still to come |
-| 4 — Polish, i18n, packaging | Not started |
+| 4 — Polish, i18n, packaging | **In progress** — notifications and `.deb` packaging done; drag-and-drop, i18n and multi-server to come |
 
 What works today: connect and reconnect, a remembered server dropdown, live user
 list with status / client / file-count columns, public chat, `/me` actions, private
