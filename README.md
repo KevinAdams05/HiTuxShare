@@ -95,6 +95,19 @@ orders itself by what you actually connect to.
 `cmake --install build --prefix ~/.local` puts the binary, the `.desktop` entry and
 the icon theme files where a desktop environment will find them.
 
+To build an installable package instead:
+
+```sh
+sh packaging/build-deb.sh
+sudo apt install ./dist/hituxshare_0.1.0_amd64.deb
+```
+
+Dependencies are computed with `dpkg-shlibdeps` rather than written by hand, so they
+stay right as the Qt modules change — and so they pick up distribution-specific
+package names such as Ubuntu 24.04's `t64` variants. Debug symbols are stripped from
+the package and kept beside it in `dist/`, because a crash report from an installed
+build is unreadable without them.
+
 ## Documentation
 
 | | |

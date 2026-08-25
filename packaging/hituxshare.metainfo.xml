@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>hituxshare</id>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+
+  <name>HiTuxShare</name>
+  <summary>Chat and share files on the BeShare network</summary>
+
+  <description>
+    <p>
+      HiTuxShare is a native Linux client for the BeShare file-sharing network,
+      speaking the MUSCLE protocol. It joins the same chat rooms, user lists and
+      file searches as the Haiku and BeOS clients it was ported from.
+    </p>
+    <p>
+      File searches are live subscriptions rather than snapshots: results keep
+      arriving as other people share things, with nothing to refresh. Transfers
+      go directly between peers and never through the server.
+    </p>
+    <p>
+      It is a port of HiShare for Haiku, itself the modern edition of Jeremy
+      Friesner's BeShare.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">hituxshare.desktop</launchable>
+
+  <url type="homepage">https://github.com/KevinAdams05/HiTuxShare</url>
+  <url type="bugtracker">https://github.com/KevinAdams05/HiTuxShare/issues</url>
+
+  <developer id="io.github.kevinadams05">
+    <name>Kevin Adams</name>
+  </developer>
+
+  <categories>
+    <category>Network</category>
+    <category>FileTransfer</category>
+  </categories>
+
+  <keywords>
+    <keyword>BeShare</keyword>
+    <keyword>MUSCLE</keyword>
+    <keyword>Haiku</keyword>
+    <keyword>chat</keyword>
+    <keyword>file sharing</keyword>
+  </keywords>
+
+  <content_rating type="oars-1.1">
+    <!-- The chat is unmoderated and between strangers, and files come from
+         strangers too. Saying so is more useful than claiming otherwise. -->
+    <content_attribute id="social-chat">intense</content_attribute>
+    <content_attribute id="social-info">moderate</content_attribute>
+  </content_rating>
+
+  <releases>
+    <release version="0.1.0" date="2026-08-25">
+      <description>
+        <p>First working version: chat, live file search, downloads and sharing.</p>
+      </description>
+    </release>
+  </releases>
+</component>

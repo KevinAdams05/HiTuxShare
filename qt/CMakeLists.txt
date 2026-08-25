@@ -36,6 +36,9 @@ install(TARGETS hitux RUNTIME DESTINATION bin)
 install(FILES ${CMAKE_SOURCE_DIR}/packaging/hituxshare.desktop
     DESTINATION share/applications)
 
+install(FILES ${CMAKE_SOURCE_DIR}/packaging/hituxshare.metainfo.xml
+    DESTINATION share/metainfo)
+
 install(FILES ${CMAKE_SOURCE_DIR}/assets/icon/hituxshare.svg
     DESTINATION share/icons/hicolor/scalable/apps)
 
