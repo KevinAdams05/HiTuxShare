@@ -1,11 +1,14 @@
+<p align="center">
+  <img src="assets/icon/hituxshare.svg" width="128" alt="HiTuxShare icon">
+</p>
+
 # HiTuxShare
 
 A native Linux port of [HiShare](https://github.com/atomozero/HiShare) — itself the
 modernized edition of Jeremy Friesner's BeShare — speaking the same
-[MUSCLE](https://github.com/jfriesne/muscle) protocol, so it joins the same chat
-rooms, user lists and file queries as the Haiku clients.
+[MUSCLE](https://github.com/jfriesne/muscle) protocol, so it joins the same chats, user lists and file queries as the Haiku clients.
 
-![HiTuxShare in a conversation](docs/screenshots/hitux-phase1.png)
+![HiTuxShare in a conversation](docs/screenshots/HiTuxShare.png)
 
 ## Status
 
@@ -25,11 +28,6 @@ list with status / client / file-count columns, public chat, `/me` actions, priv
 messages, ping with round-trip timing, nickname changes, input history, nickname
 tab-completion, timestamps, light and dark themes, and persistent settings including
 window and splitter geometry.
-
-The app icon is BeShare's, converted from HiShare's original HVIF vector source —
-see [`assets/icon/README.md`](assets/icon/README.md).
-
-Binaries are **2.3 MB stripped** and idle at 0% CPU.
 
 ## Build
 

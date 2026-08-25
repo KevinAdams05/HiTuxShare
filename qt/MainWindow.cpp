@@ -388,7 +388,7 @@ MainWindow::ConnectionStateChanged(ConnectionState state)
 
 
 void
-MainWindow::LocalSessionIdAssigned(const String& sessionId, const String& hostName)
+MainWindow::LocalSessionIdAssigned(const String& sessionId, const String& /*hostName*/)
 {
 	// Promote only now, not at connect time: reaching a session ID is the first point
 	// at which we know the server is a working BeShare server and not just a socket
@@ -396,10 +396,14 @@ MainWindow::LocalSessionIdAssigned(const String& sessionId, const String& hostNa
 	fSettings.RememberServer(fConnection.GetServerAddress());
 	_PopulateServerList();
 
+	// Deliberately the server's address, not the (hostName) the server reports back.
+	// That value is the address the server sees US at -- i.e. the user's own public IP
+	// -- which is both useless in a title bar and something they would not expect to
+	// be putting on screen during a screen-share or a screenshot.
 	setWindowTitle(tr("%1 -- %2 on %3")
 		.arg(QLatin1String(HITUX_SHARE_NAME),
 			ToQString(fConnection.GetLocalUserName()),
-			ToQString(hostName)));
+			ToQString(fConnection.GetServerAddress())));
 
 	_AppendLocalLine(LOG_INFORMATION_MESSAGE,
 		tr("You are session %1.").arg(ToQString(sessionId)));
