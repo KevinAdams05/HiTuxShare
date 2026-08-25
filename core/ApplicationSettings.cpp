@@ -43,6 +43,7 @@ const char* const kFieldMaxUploadRate = "maxuploadrate";
 const char* const kFieldFirewalled = "firewalled";
 const char* const kFieldAutoClear = "autoclear";
 const char* const kFieldChatFontPointSize = "chatfontsize";
+const char* const kFieldAutoUpdateServers = "autoupdateservers";
 const char* const kFieldRecentUserNames = "usernamelist";
 const char* const kFieldRecentStatuses = "userstatuslist";
 const char* const kFieldColumnLayoutPrefix = "columns:";
@@ -320,6 +321,23 @@ void
 ApplicationSettings::RememberServer(const String& serverAddress)
 {
 	_RememberInList(kFieldServerList, serverAddress, kMaximumRememberedServers);
+}
+
+
+bool
+ApplicationSettings::GetAutoUpdateServerList() const
+{
+	bool autoUpdate = false;
+	(void) fSettings.FindBool(kFieldAutoUpdateServers, autoUpdate);
+	return autoUpdate;
+}
+
+
+void
+ApplicationSettings::SetAutoUpdateServerList(bool autoUpdateServerList)
+{
+	(void) fSettings.ReplaceBool(true, kFieldAutoUpdateServers,
+		autoUpdateServerList);
 }
 
 

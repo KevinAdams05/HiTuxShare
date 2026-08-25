@@ -42,6 +42,7 @@ namespace hitux {
 class ChatInputLine;
 class ChatLogView;
 class DesktopNotifier;
+class ServerListUpdater;
 class FileResultModel;
 class UserListModel;
 
@@ -102,6 +103,8 @@ private slots:
 	void _OnQueryFieldReturnPressed();
 	void _OnFlushPendingResults();
 	void _OnStatusChanged();
+	void _OnServerListReceived(const QStringList& serversToAdd,
+		const QStringList& serversToRemove);
 	void _OnShowSettings();
 	void _OnToggleNotifications(bool enabled);
 	void _OnChooseShareFolder();
@@ -193,6 +196,7 @@ private:
 	QAction* fFileSharingAction;
 	QAction* fNotificationsAction;
 	DesktopNotifier* fNotifier;
+	ServerListUpdater* fServerListUpdater;
 
 	QTimer* fIdleTimer;
 

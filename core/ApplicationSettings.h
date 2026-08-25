@@ -142,6 +142,14 @@ public:
 	uint32 GetChatFontPointSize() const;
 	void SetChatFontPointSize(uint32 chatFontPointSize);
 
+	/** Whether to fetch the community server list at startup.
+	  *
+	  * Off by default. It contacts a third party and reveals this machine's
+	  * address to them, which should be a choice rather than a surprise.
+	  */
+	bool GetAutoUpdateServerList() const;
+	void SetAutoUpdateServerList(bool autoUpdateServerList);
+
 	/** User names this person has used, most recent first.
 	  *
 	  * Names are how you are known on this network and people change them

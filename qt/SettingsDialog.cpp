@@ -214,6 +214,17 @@ SettingsDialog::_BuildBehaviourPage()
 		page);
 	layout->addRow(fNotificationsBox);
 
+	fAutoUpdateServersBox = new QCheckBox(
+		tr("Fetch the community server list at startup"), page);
+	layout->addRow(fAutoUpdateServersBox);
+
+	QLabel* fetchNote = new QLabel(tr("This contacts beshare.tycomsystems.com "
+		"and tells it your address. Servers it names are only added to the "
+		"dropdown — nothing connects on its own."), page);
+	fetchNote->setWordWrap(true);
+	fetchNote->setEnabled(false);
+	layout->addRow(fetchNote);
+
 	fChatLoggingBox = new QCheckBox(tr("Write chat to a log file"), page);
 	layout->addRow(fChatLoggingBox);
 
@@ -264,6 +275,7 @@ SettingsDialog::_LoadFromSettings()
 	fConnectOnStartupBox->setChecked(fSettings.GetConnectOnStartup());
 	fNotificationsBox->setChecked(fSettings.GetNotificationsEnabled());
 	fChatFontSizeBox->setValue((int) fSettings.GetChatFontPointSize());
+	fAutoUpdateServersBox->setChecked(fSettings.GetAutoUpdateServerList());
 	fChatLoggingBox->setChecked(fSettings.GetChatLoggingEnabled());
 	fLogFolderField->setText(ToQString(fSettings.GetLogDirectory()));
 }
@@ -300,6 +312,7 @@ SettingsDialog::ApplyToSettings()
 	fSettings.SetConnectOnStartup(fConnectOnStartupBox->isChecked());
 	fSettings.SetNotificationsEnabled(fNotificationsBox->isChecked());
 	fSettings.SetChatFontPointSize((uint32) fChatFontSizeBox->value());
+	fSettings.SetAutoUpdateServerList(fAutoUpdateServersBox->isChecked());
 	fSettings.SetChatLoggingEnabled(fChatLoggingBox->isChecked());
 	fSettings.SetLogDirectory(ToMuscleString(fLogFolderField->text().trimmed()));
 }

@@ -15,6 +15,7 @@
 #include "qt/DesktopNotifier.h"
 #include "qt/FileResultModel.h"
 #include "qt/QtConversions.h"
+#include "qt/ServerListUpdater.h"
 #include "qt/SettingsDialog.h"
 #include "qt/TransferModel.h"
 #include "qt/UserListModel.h"
@@ -128,6 +129,7 @@ MainWindow::MainWindow(QWidget* parent)
 	fFileSharingAction(nullptr),
 	fNotificationsAction(nullptr),
 	fNotifier(nullptr),
+	fServerListUpdater(nullptr),
 	fIdleTimer(nullptr),
 	fResultFlushTimer(nullptr),
 	fUserNamesDirty(false),
@@ -163,6 +165,15 @@ MainWindow::MainWindow(QWidget* parent)
 
 	fNotifier = new DesktopNotifier(this);
 
+	fServerListUpdater = new ServerListUpdater(this);
+	connect(fServerListUpdater, &ServerListUpdater::ServerListReceived,
+		this, &MainWindow::_OnServerListReceived);
+	connect(fServerListUpdater, &ServerListUpdater::UpdateFailed, this,
+		[this](const QString& reason) {
+			_AppendLocalLine(LOG_WARNING_MESSAGE,
+				tr("Could not fetch the server list: %1").arg(reason));
+		});
+
 	fDownloads.SetListener(this);
 	fUploadServer.SetListener(this);
 	fTransferModel->SetUploadServer(&fUploadServer);
@@ -180,6 +191,9 @@ MainWindow::MainWindow(QWidget* parent)
 		tr("%1 %2 -- type /help for a list of commands.")
 			.arg(QLatin1String(HITUX_SHARE_NAME),
 				QLatin1String(HITUX_SHARE_VERSION_STRING)));
+
+	if (fSettings.GetAutoUpdateServerList())
+		fServerListUpdater->Start();
 
 	if (fSettings.GetConnectOnStartup())
 		_ConnectToConfiguredServer();
@@ -909,6 +923,71 @@ MainWindow::_OnStatusChanged()
 	fConnection.SetLocalUserStatus(ToMuscleString(status));
 	fSettings.SetUserStatus(ToMuscleString(status));
 	fSettings.RememberStatus(ToMuscleString(status));
+}
+
+
+void
+MainWindow::_OnServerListReceived(const QStringList& serversToAdd,
+	const QStringList& serversToRemove)
+{
+	Queue<muscle::String> serverList = fSettings.GetServerList();
+	uint32 addedCount = 0;
+	uint32 removedCount = 0;
+
+	for (const QString& server : serversToRemove) {
+		const muscle::String candidate = ToMuscleString(server);
+
+		// Never remove the server we are using or the one selected: a list
+		// fetched over the network should not be able to take away what is
+		// working right now.
+		if (candidate.EqualsIgnoreCase(fConnection.GetServerAddress())
+				|| candidate.EqualsIgnoreCase(ToMuscleString(
+					_GetSelectedServerAddress()))) {
+			continue;
+		}
+
+		for (int32 i = (int32) serverList.GetNumItems() - 1; i >= 0; i--) {
+			if (serverList[(uint32) i].EqualsIgnoreCase(candidate)) {
+				(void) serverList.RemoveItemAt((uint32) i);
+				removedCount++;
+			}
+		}
+	}
+
+	for (const QString& server : serversToAdd) {
+		const muscle::String candidate = ToMuscleString(server);
+
+		bool alreadyKnown = false;
+		for (uint32 i = 0; i < serverList.GetNumItems(); i++) {
+			if (serverList[i].EqualsIgnoreCase(candidate)) {
+				alreadyKnown = true;
+				break;
+			}
+		}
+
+		// Appended rather than promoted: this list suggests what exists, it
+		// does not get to decide what you connect to next.
+		if (alreadyKnown == false && serverList.AddTail(candidate).IsOK())
+			addedCount++;
+	}
+
+	if (addedCount == 0 && removedCount == 0) {
+		// Says how many entries the file actually contained, so a parse that
+		// silently finds nothing looks different from a list with nothing new
+		// in it. Those two were indistinguishable and one of them was a bug.
+		_AppendLocalLine(LOG_INFORMATION_MESSAGE,
+			tr("Server list checked: %n server(s) listed, nothing new.", "",
+				serversToAdd.size()));
+		return;
+	}
+
+	fSettings.SetServerList(serverList);
+	(void) fSettings.Save();
+	_PopulateServerList();
+
+	_AppendLocalLine(LOG_INFORMATION_MESSAGE,
+		tr("Server list updated: %n added", "", (int) addedCount)
+			+ tr(", %n removed.", "", (int) removedCount));
 }
 
 

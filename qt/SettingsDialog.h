@@ -78,6 +78,7 @@ private:
 
 	QCheckBox* fConnectOnStartupBox;
 	QCheckBox* fNotificationsBox;
+	QCheckBox* fAutoUpdateServersBox;
 	QCheckBox* fChatLoggingBox;
 	QLineEdit* fLogFolderField;
 	QSpinBox* fChatFontSizeBox;
