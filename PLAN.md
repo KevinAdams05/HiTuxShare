@@ -1,7 +1,7 @@
 # HiTuxShare — porting HiShare from Haiku to Linux
 
-**Status:** Phase 0 and Phase 1 implemented and verified — see [README](README.md) for what works
-**Date:** 2026-08-24 (plan), Phase 1 landed the same day
+**Status:** Phases 0–3 implemented and verified — see [README](README.md) for what works
+**Date:** 2026-08-24 (plan); Phases 1–2 landed the same day, Phase 3 on 2026-08-25
 **Upstream:** [atomozero/HiShare](https://github.com/atomozero/HiShare) 1.2 (Haiku) · [jfriesne/muscle](https://github.com/jfriesne/muscle) 9.92
 **Goal:** a light, fast, small native Linux client that is wire-compatible with BeShare 3.04 / HiShare 1.2
 
@@ -443,11 +443,17 @@ GUI or logic bug. It is nearly free — the client already exists upstream.
 **Done when:** a Haiku HiShare user and a HiTuxShare user hold a conversation, public and private,
 and each sees the other correctly in the user list.
 
-**Deliberately deferred to Phase 4:** multi-server. It is HiShare 1.2's headline feature and it is
-genuinely nice, but it multiplies the state model of every list in the app. Design the core so
-`ServerConnection` is already a first-class object that things hang off (HiShare did this — every
-callback carries a `ServerConnection*`), then adding connection #2 later is bookkeeping rather than
-surgery.
+**Deferred to Phase 4:** multi-server. It is HiShare 1.2's headline feature and genuinely nice, but
+it multiplies the state model of every list in the app.
+
+> **Correction, 2026-08-25.** The plan said to design the core so `ServerConnection` is already a
+> first-class object that everything hangs off, so that adding connection #2 would be bookkeeping
+> rather than surgery. **That was not done.** `MainWindow` owns a single `ServerConnection` member
+> and no listener callback carries a connection pointer, so the groundwork the plan called for does
+> not exist. Multi-server is therefore a refactor plus a feature, not just a feature: session IDs
+> are per-connection, so `UserRegistry`, the results model and every download would each need to
+> know which connection they belong to. Worth knowing before anyone estimates it from the sentence
+> above.
 
 ### Phase 2 — Downloading
 
@@ -536,6 +542,14 @@ are written down next to them.
   corollary: choosing GTK or FLTK later means writing and debugging that ~30-line
   bridge, and it is the piece most likely to produce rare, hard-to-reproduce
   cross-thread bugs.
+- **Phase 2 and 3 each had one bug that no amount of reading could have prevented**, both in the
+  same shape: a call that silently did nothing. The checksum-over-munged-bytes ordering, and
+  `MessageTransceiverThread` handing callbacks a full session *path* where the parameter is named
+  like an ID. Neither is written down anywhere; both are now in `docs/PROTOCOL.md` and the commit
+  messages.
+- **`docs/PROTOCOL.md` was wrong about `FILE_LIST`** — the field is `"files"`, not
+  `"beshare:File Name"`, and the doc omitted that there is no end-of-file message at all. Written
+  from reading the source; corrected from making it work.
 
 **Open questions for you**
 

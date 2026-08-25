@@ -177,21 +177,51 @@ the uploader advertised in its `beshare/name` node, and both sides speak flatten
 the same `MessageIOGateway` framing.
 
 ```
-downloader → uploader   TRANSFER_COMMAND_PEER_ID   { "beshare:FromSession", "beshare:FromUserName" }
-downloader → uploader   TRANSFER_COMMAND_FILE_LIST { "beshare:File Name"[], "beshare:Path"[],
-                                                     Int64 "offset"[], Int64 "maxbytes"[] }
-uploader   → downloader TRANSFER_COMMAND_FILE_HEADER { "beshare:File Name", Int64 "beshare:File Size",
-                                                     "beshare:FromSession", "beshare:Path",
-                                                     "beshare:Kind",
-                                                     Int64 "beshare:StartOffset"  (resume),
-                                                     Int64 "beshare:SendLength"   (byte range) }
-uploader   → downloader TRANSFER_COMMAND_FILE_DATA  { "data" (B_RAW_TYPE), Int32 "chk", Int32 "mm" } × N
+downloader → uploader   TRANSFER_COMMAND_PEER_ID
+    String "beshare:FromSession"        the requester's session ID
+    String "beshare:FromUserName"       and their name
+
+downloader → uploader   TRANSFER_COMMAND_FILE_LIST
+    String "beshare:FromSession"        repeated here for older clients
+    String "beshare:FromUserName"
+    Int32  "mm"                         munge mode the requester would prefer
+    String "files"[]                    the file names being asked for
+    Int64  "offsets"[]                  byte to start at; 0 for a fresh download
+    String "beshare:Path"[]             sub-path per file
+    Data   "md5"[]                      partial-file hash, ONE DUMMY BYTE when offset is 0
+    Int64  "maxbytes"[]                 optional; only sent when some file is byte-range bounded
+
+uploader   → downloader TRANSFER_COMMAND_FILE_HEADER
+    String "beshare:File Name"
+    Int64  "beshare:File Size"
+    String "beshare:FromSession"
+    String "beshare:Path"
+    String "beshare:Kind"
+    Int64  "beshare:StartOffset"        resume only
+    Int64  "beshare:SendLength"         byte-range only
+
+uploader   → downloader TRANSFER_COMMAND_FILE_DATA × N
+    Data   "data" (B_RAW_TYPE)          the bytes, munged
+    Int32  "chk"                        checksum OF THE MUNGED BYTES
+    Int32  "mm"                         what munging was actually applied
 ```
 
-- **`chk`** is a checksum over the chunk. TCP should make this unnecessary; BeShare added it because
-  users kept hitting corrupted resumes anyway. Honour it — mismatch aborts the session.
+The four per-file fields in `FILE_LIST` are read **by index** and must stay aligned with each other.
+`"files"` is the field name — not `"beshare:File Name"`, which is what `FILE_HEADER` uses in the
+other direction.
+
+- **A fresh download needs no MD5.** When the offset is zero the `"md5"` entry is a single dummy
+  byte, so a client that never implements resume still sends a well-formed request.
+- **`chk` covers the bytes as they go on the wire, which is *after* munging.** Verify the checksum
+  first, then un-munge. Doing it the other way makes every XOR-munged chunk look corrupt, and the
+  symptom is a transfer that aborts immediately with a checksum error on data that is perfectly fine.
 - **`mm`** is the munge mode: `0` = plain, `1` = every byte XOR `0xFF`. It exists to defeat
-  middleboxes that filter on content. Both directions must agree.
+  middleboxes that filter on content. The requester states a preference in `FILE_LIST`; the sender
+  stamps each chunk with what it actually did, so a client must handle either regardless of what it
+  asked for.
+- **There is no end-of-file message.** The downloader knows a file is finished by counting bytes
+  against the size in `FILE_HEADER`; the sender simply stops reading and moves on to the next
+  `FILE_HEADER`, or closes the connection. A receiver that waits for a terminator waits forever.
 - **`TRANSFER_COMMAND_NOTIFY_QUEUED`** tells the downloader it is on the uploader's wait list.
 - **`TRANSFER_COMMAND_REJECTED`** carries `Int64 "timeleft"` for a ban.
 - Resume validity is confirmed by hashing the first `NUM_PARTIAL_HASH_BYTES` (64 KB) of the local
@@ -213,7 +243,48 @@ inverted at the TCP level while staying the same at the protocol level.
 **Two firewalled peers can never transfer to each other.** That is a protocol-level limitation and
 the UI should say so plainly rather than appearing to hang.
 
-## 9. Things that look like protocol but are not
+## 9. Publishing a share
+
+A file is offered by writing a node under our own session:
+
+```
+PR_COMMAND_SETDATA {
+   "beshare/files/<filename>" = Message {
+      Int64  "beshare:File Size"
+      Int32  "beshare:Modification Time"     unix time
+      String "beshare:Path"                  sub-path below the share root
+      String "beshare:Kind"                  MIME type
+   }
+}
+```
+
+**The node key is the bare file name.** The directory is carried separately in `beshare:Path` and is
+not part of the key, so the same name in two sub-folders is *one* node as far as the server is
+concerned — the second write replaces the first. Any client that shares a tree has to decide what to
+do about that; BeShare reference-counts them, HiTuxShare keeps the first and reports the rest.
+
+Several files may be batched into one `PR_COMMAND_SETDATA`, and should be: a share of a few thousand
+files is otherwise a few thousand round trips.
+
+Alongside the files:
+
+```
+PR_COMMAND_SETDATA { "beshare/filecount"   = { Int32 "filecount" } }
+PR_COMMAND_SETDATA { "beshare/uploadstats" = { Int32 "cur", Int32 "max" } }
+```
+
+To stop sharing, remove the whole subtree. `"beshare/fi*es"` covers both spellings, which matters if
+the firewalled flag changed while files were published:
+
+```
+PR_COMMAND_REMOVEDATA { PR_NAME_KEYS = "beshare/fi*es" }
+```
+
+The port peers should connect to is published in the `beshare/name` node's `"port"` field. **Zero is
+meaningful**: it says "I accept no connections", which is the honest thing to advertise until a
+listening socket actually exists.
+
+## 10. Things that look like protocol but are not
 
 - `installid` is used for per-machine upload bans and queue fairness, not identity or auth.
 - There is **no authentication of any kind**. Session IDs are assigned by the server and any client

@@ -129,7 +129,39 @@ done
 wmctrl -i -a "$WINID" && gnome-screenshot -w -f /tmp/hitux.png
 ```
 
-## 5. Things worth testing that are easy to get wrong
+## 5. Testing the share side
+
+Sharing needs two peers: something to publish files and something to come and get them. Point both
+at the LAN server, give each its own `XDG_CONFIG_HOME`, and give the sharer a folder with a couple
+of known files in it.
+
+Build the test share so it exercises the awkward cases, because they are the ones that break:
+
+```sh
+mkdir -p /tmp/share/docs
+echo hello                 > /tmp/share/readme.txt
+echo top                   > /tmp/share/notes.txt
+echo duplicate             > /tmp/share/docs/notes.txt   # same leaf name, different folder
+echo hidden                > /tmp/share/.secret          # must not be published
+head -c 5000 /dev/urandom  > /tmp/share/blob.bin         # content worth comparing
+```
+
+Expect five files published, `.secret` skipped, and the duplicate `notes.txt` reported rather than
+silently shadowing the other one — the protocol keys a shared file by its bare name, so only one of
+them can exist as a node.
+
+Verify a transfer by comparing bytes, not by looking at a progress bar:
+
+```sh
+cmp /tmp/share/blob.bin ~/Downloads/HiTuxShare/blob.bin && echo identical
+```
+
+**Watch what the uploading side says too.** A download that stalls after the file list, with the
+downloader sitting at "asking for the file" and the uploader cheerfully reporting that somebody is
+downloading, means messages are being sent to a distribution path that matches no session — sending
+to nobody is not an error anywhere in MUSCLE.
+
+## 6. Things worth testing that are easy to get wrong
 
 - **Leaving and rejoining under the same name.** Session IDs change; nothing may be
   keyed off the name.
@@ -139,3 +171,7 @@ wmctrl -i -a "$WINID" && gnome-screenshot -w -f /tmp/hitux.png
   text, so unescaped markup from a peer would render.
 - **Disconnect while the server is mid-send**, e.g. kill `muscled` under a connected
   client.
+- **A file that disappears between the scan and the request.** The share list is a snapshot; a peer
+  can ask for something that has since been deleted.
+- **Two peers downloading from you at once.** Each must be paced independently — one slow peer must
+  not stall the other, and neither must receive the other's data.
