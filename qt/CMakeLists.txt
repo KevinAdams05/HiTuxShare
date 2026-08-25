@@ -11,6 +11,7 @@ set(CMAKE_AUTORCC ON)
 add_executable(hitux
     ChatInputLine.cpp
     ChatLogView.cpp
+    FileResultModel.cpp
     MainWindow.cpp
     UserListModel.cpp
     main.cpp

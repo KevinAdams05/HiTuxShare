@@ -10,6 +10,7 @@
 #include "core/HiTuxShareVersion.h"
 #include "qt/ChatInputLine.h"
 #include "qt/ChatLogView.h"
+#include "qt/FileResultModel.h"
 #include "qt/QtConversions.h"
 #include "qt/UserListModel.h"
 
@@ -91,6 +92,13 @@ MainWindow::MainWindow(QWidget* parent)
 	fCallbackMechanism(this),
 	fConnection(&fCallbackMechanism),
 	fChatLogView(nullptr),
+	fResultsView(nullptr),
+	fResultsModel(nullptr),
+	fResultsProxyModel(nullptr),
+	fQueryField(nullptr),
+	fQueryButton(nullptr),
+	fResultCountLabel(nullptr),
+	fLeftSplitter(nullptr),
 	fChatInputLine(nullptr),
 	fUserListView(nullptr),
 	fUserListModel(nullptr),
@@ -106,7 +114,9 @@ MainWindow::MainWindow(QWidget* parent)
 	fDisconnectAction(nullptr),
 	fShowTimestampsAction(nullptr),
 	fShowHostColumnAction(nullptr),
-	fIdleTimer(nullptr)
+	fIdleTimer(nullptr),
+	fResultFlushTimer(nullptr),
+	fUserNamesDirty(false)
 {
 	(void) fSettings.Load();
 
@@ -124,7 +134,18 @@ MainWindow::MainWindow(QWidget* parent)
 	connect(fIdleTimer, &QTimer::timeout, this, &MainWindow::_OnIdleTimerFired);
 	fIdleTimer->start();
 
+	// Single-shot and restarted on each burst, so a stream of results coalesces
+	// into one model transaction instead of one per row.
+	fResultFlushTimer = new QTimer(this);
+	fResultFlushTimer->setSingleShot(true);
+	fResultFlushTimer->setInterval(120);
+	connect(fResultFlushTimer, &QTimer::timeout,
+		this, &MainWindow::_OnFlushPendingResults);
+
+	fResultsModel->SetUserRegistry(&fConnection.GetUsers());
+
 	_UpdateConnectionWidgets();
+	_UpdateQueryWidgets();
 	_UpdateStatusBar();
 
 	_AppendLocalLine(LOG_INFORMATION_MESSAGE,
@@ -193,10 +214,66 @@ MainWindow::_BuildUserInterface()
 
 	mainLayout->addLayout(connectionLayout);
 
-	// Chat on the left, user list on the right.
+	// Results above chat on the left, user list on the right.
 	fSplitter = new QSplitter(Qt::Horizontal, centralWidget);
+	fLeftSplitter = new QSplitter(Qt::Vertical, fSplitter);
 
-	QWidget* chatContainer = new QWidget(fSplitter);
+	QWidget* resultsContainer = new QWidget(fLeftSplitter);
+	QVBoxLayout* resultsLayout = new QVBoxLayout(resultsContainer);
+	resultsLayout->setContentsMargins(0, 0, 0, 0);
+	resultsLayout->setSpacing(4);
+
+	QHBoxLayout* queryLayout = new QHBoxLayout();
+	queryLayout->addWidget(new QLabel(tr("Search:"), resultsContainer));
+
+	fQueryField = new QLineEdit(resultsContainer);
+	fQueryField->setPlaceholderText(tr("File name pattern, e.g. *.hpkg"));
+	fQueryField->setClearButtonEnabled(true);
+	connect(fQueryField, &QLineEdit::returnPressed,
+		this, &MainWindow::_OnQueryFieldReturnPressed);
+	queryLayout->addWidget(fQueryField, 1);
+
+	fQueryButton = new QPushButton(tr("Search"), resultsContainer);
+	fQueryButton->setAutoDefault(false);
+	connect(fQueryButton, &QPushButton::clicked,
+		this, &MainWindow::_OnQueryButtonClicked);
+	queryLayout->addWidget(fQueryButton);
+
+	fResultCountLabel = new QLabel(resultsContainer);
+	queryLayout->addWidget(fResultCountLabel);
+
+	resultsLayout->addLayout(queryLayout);
+
+	fResultsModel = new FileResultModel(this);
+
+	fResultsProxyModel = new QSortFilterProxyModel(this);
+	fResultsProxyModel->setSourceModel(fResultsModel);
+	fResultsProxyModel->setSortCaseSensitivity(Qt::CaseInsensitive);
+	// Size and Modified carry a raw comparable value under this role, so they
+	// sort by magnitude while still displaying as "2.8 MB" and a date.
+	fResultsProxyModel->setSortRole(FileResultModel::kSortRole);
+
+	fResultsView = new QTreeView(resultsContainer);
+	fResultsView->setModel(fResultsProxyModel);
+	fResultsView->setRootIsDecorated(false);
+	fResultsView->setAlternatingRowColors(true);
+	fResultsView->setSortingEnabled(true);
+	fResultsView->setSelectionBehavior(QAbstractItemView::SelectRows);
+	fResultsView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+	fResultsView->setUniformRowHeights(true);
+	fResultsView->header()->setStretchLastSection(false);
+	fResultsView->header()->setSectionResizeMode(FileResultModel::COLUMN_NAME,
+		QHeaderView::Stretch);
+	for (int column = FileResultModel::COLUMN_SIZE;
+			column < FileResultModel::COLUMN_COUNT; column++) {
+		fResultsView->header()->setSectionResizeMode(column,
+			QHeaderView::ResizeToContents);
+	}
+
+	resultsLayout->addWidget(fResultsView, 1);
+	fLeftSplitter->addWidget(resultsContainer);
+
+	QWidget* chatContainer = new QWidget(fLeftSplitter);
 	QVBoxLayout* chatLayout = new QVBoxLayout(chatContainer);
 	chatLayout->setContentsMargins(0, 0, 0, 0);
 	chatLayout->setSpacing(4);
@@ -212,7 +289,12 @@ MainWindow::_BuildUserInterface()
 		[this](const QString& prefix) { return _GetCompletionCandidates(prefix); });
 	chatLayout->addWidget(fChatInputLine);
 
-	fSplitter->addWidget(chatContainer);
+	fLeftSplitter->addWidget(chatContainer);
+	fLeftSplitter->setStretchFactor(0, 3);
+	fLeftSplitter->setStretchFactor(1, 2);
+	fLeftSplitter->setSizes({360, 240});
+
+	fSplitter->addWidget(fLeftSplitter);
 
 	fUserListModel = new UserListModel(this);
 
@@ -268,7 +350,7 @@ MainWindow::_BuildUserInterface()
 	fUserCountLabel = new QLabel(this);
 	statusBar()->addPermanentWidget(fUserCountLabel);
 
-	resize(960, 600);
+	resize(1100, 720);
 	fChatInputLine->setFocus();
 }
 
@@ -383,6 +465,7 @@ MainWindow::ConnectionStateChanged(ConnectionState state)
 	}
 
 	_UpdateConnectionWidgets();
+	_UpdateQueryWidgets();
 	_UpdateStatusBar();
 }
 
@@ -414,6 +497,9 @@ void
 MainWindow::UserUpdated(const UserRecord& user, bool isNewUser)
 {
 	fUserListModel->UpdateUser(user);
+	fUserNamesDirty = true;
+	if (fResultFlushTimer->isActive() == false)
+		fResultFlushTimer->start();
 
 	if (isNewUser) {
 		ChatMessage joinMessage(LOG_USER_EVENT_MESSAGE, muscle::String());
@@ -430,6 +516,12 @@ void
 MainWindow::UserLeft(const UserRecord& user)
 {
 	fUserListModel->RemoveUser(user.sessionId);
+
+	// Their files went with them.  Dropping the lot in one operation matters:
+	// a peer sharing thousands of files would otherwise arrive as thousands of
+	// individual removals, each shifting every row after it.
+	fResultsModel->RemoveResultsForSession(user.sessionId);
+	_UpdateResultCount();
 
 	ChatMessage leaveMessage(LOG_USER_EVENT_MESSAGE, muscle::String());
 	leaveMessage.text = ToMuscleString(tr("%1 has left.")
@@ -459,6 +551,46 @@ MainWindow::PingReplyReceived(const UserRecord& user, uint64 roundTripMicrosecon
 		text += tr(" (%1)").arg(ToQString(peerVersion));
 
 	_AppendLocalLine(LOG_INFORMATION_MESSAGE, text);
+}
+
+
+void
+MainWindow::QueryResultAdded(const FileResult& result)
+{
+	fPendingResults.append(result);
+	if (fResultFlushTimer->isActive() == false)
+		fResultFlushTimer->start();
+}
+
+
+void
+MainWindow::QueryResultRemoved(const String& sessionId, const String& fileName)
+{
+	fResultsModel->RemoveResult(sessionId, fileName);
+	_UpdateResultCount();
+}
+
+
+void
+MainWindow::QueryResultsCleared()
+{
+	fPendingResults.clear();
+	fResultsModel->Clear();
+	_UpdateResultCount();
+}
+
+
+void
+MainWindow::QuerySweepStateChanged(bool isSweeping)
+{
+	if (isSweeping == false) {
+		// Flush immediately rather than waiting out the timer, so "search
+		// complete" and the last results appear together.
+		_OnFlushPendingResults();
+	}
+
+	_UpdateQueryWidgets();
+	_UpdateResultCount();
 }
 
 
@@ -508,6 +640,42 @@ void
 MainWindow::_OnIdleTimerFired()
 {
 	fConnection.PerformIdleTasks();
+}
+
+
+void
+MainWindow::_OnQueryButtonClicked()
+{
+	if (fConnection.IsQueryActive())
+		fConnection.StopQuery();
+	else
+		_StartQuery();
+}
+
+
+void
+MainWindow::_OnQueryFieldReturnPressed()
+{
+	_StartQuery();
+}
+
+
+void
+MainWindow::_OnFlushPendingResults()
+{
+	if (fPendingResults.isEmpty() == false) {
+		fResultsModel->AddResults(fPendingResults);
+		fPendingResults.clear();
+		_UpdateResultCount();
+	}
+
+	if (fUserNamesDirty) {
+		// A user's name arrives separately from their files, so results shared
+		// by someone whose name node has not landed yet would otherwise keep
+		// showing a bare session ID.
+		fResultsModel->RefreshUserNames();
+		fUserNamesDirty = false;
+	}
 }
 
 
@@ -610,6 +778,18 @@ MainWindow::_HandleUserInput(const QString& input)
 
 		case CHAT_COMMAND_DISCONNECT:
 			fConnection.DisconnectFromServer();
+			break;
+
+		case CHAT_COMMAND_START_QUERY:
+			if (command.argument.HasChars())
+				fQueryField->setText(ToQString(command.argument));
+
+			_StartQuery();
+			break;
+
+		case CHAT_COMMAND_STOP_QUERY:
+			fConnection.StopQuery();
+			_UpdateQueryWidgets();
 			break;
 
 		case CHAT_COMMAND_CLEAR:
@@ -804,6 +984,50 @@ QString
 MainWindow::_GetSelectedServerAddress() const
 {
 	return fServerAddressBox->currentText().trimmed();
+}
+
+
+void
+MainWindow::_StartQuery()
+{
+	if (fConnection.IsConnected() == false) {
+		_AppendLocalLine(LOG_ERROR_MESSAGE, tr("Not connected to a server."));
+		return;
+	}
+
+	const QString pattern = fQueryField->text().trimmed();
+
+	// An empty box means "everything", which is a legitimate thing to ask for on
+	// a small server and a very large thing to ask for on a busy one.
+	fConnection.StartQuery(muscle::String("*"),
+		ToMuscleString(pattern.isEmpty() ? QStringLiteral("*") : pattern));
+
+	_UpdateQueryWidgets();
+}
+
+
+void
+MainWindow::_UpdateQueryWidgets()
+{
+	const bool isActive = fConnection.IsQueryActive();
+	fQueryButton->setText(isActive ? tr("Stop") : tr("Search"));
+	fQueryButton->setEnabled(fConnection.IsConnected());
+	fQueryField->setEnabled(fConnection.IsConnected());
+}
+
+
+void
+MainWindow::_UpdateResultCount()
+{
+	const int count = fResultsModel->rowCount();
+	if (count == 0 && fConnection.IsQueryActive() == false) {
+		fResultCountLabel->clear();
+		return;
+	}
+
+	fResultCountLabel->setText(fConnection.IsQueryActive()
+		? tr("%n result(s), still listening", "", count)
+		: tr("%n result(s)", "", count));
 }
 
 

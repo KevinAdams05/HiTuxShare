@@ -13,11 +13,13 @@
 #include "platform/qt/QPostEventCallbackMechanism.h"
 
 #include <QMainWindow>
+#include <QVector>
 
 
 class QAction;
 class QLabel;
 class QComboBox;
+class QLabel;
 class QLineEdit;
 class QPushButton;
 class QSortFilterProxyModel;
@@ -32,6 +34,7 @@ namespace hitux {
 
 class ChatInputLine;
 class ChatLogView;
+class FileResultModel;
 class UserListModel;
 
 
@@ -59,6 +62,11 @@ public:
 	void ChatMessageReceived(const ChatMessage& message) override;
 	void PingReplyReceived(const UserRecord& user, uint64 roundTripMicroseconds,
 		const muscle::String& peerVersion) override;
+	void QueryResultAdded(const FileResult& result) override;
+	void QueryResultRemoved(const muscle::String& sessionId,
+		const muscle::String& fileName) override;
+	void QueryResultsCleared() override;
+	void QuerySweepStateChanged(bool isSweeping) override;
 
 protected:
 	void closeEvent(QCloseEvent* event) override;
@@ -68,6 +76,9 @@ private slots:
 	void _OnInputReturnPressed();
 	void _OnUserDoubleClicked(const QModelIndex& index);
 	void _OnIdleTimerFired();
+	void _OnQueryButtonClicked();
+	void _OnQueryFieldReturnPressed();
+	void _OnFlushPendingResults();
 	void _OnShowAbout();
 	void _OnToggleTimestamps(bool showTimestamps);
 
@@ -85,6 +96,9 @@ private:
 	void _ShowConnectionInformation();
 
 	void _ConnectToConfiguredServer();
+	void _StartQuery();
+	void _UpdateQueryWidgets();
+	void _UpdateResultCount();
 	void _UpdateConnectionWidgets();
 	void _PopulateServerList();
 	QString _GetSelectedServerAddress() const;
@@ -102,6 +116,13 @@ private:
 	ServerConnection fConnection;
 
 	ChatLogView* fChatLogView;
+	QTreeView* fResultsView;
+	FileResultModel* fResultsModel;
+	QSortFilterProxyModel* fResultsProxyModel;
+	QLineEdit* fQueryField;
+	QPushButton* fQueryButton;
+	QLabel* fResultCountLabel;
+	QSplitter* fLeftSplitter;
 	ChatInputLine* fChatInputLine;
 	QTreeView* fUserListView;
 	UserListModel* fUserListModel;
@@ -122,6 +143,13 @@ private:
 	QAction* fShowHostColumnAction;
 
 	QTimer* fIdleTimer;
+
+	// A bare "*" against a peer sharing twenty thousand files delivers twenty
+	// thousand results in a burst.  They are buffered and flushed as one model
+	// transaction rather than inserted a row at a time.
+	QVector<FileResult> fPendingResults;
+	QTimer* fResultFlushTimer;
+	bool fUserNamesDirty;
 };
 
 
