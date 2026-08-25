@@ -8,6 +8,8 @@
 #include "core/BeShareProtocol.h"
 #include "core/ChatCommandParser.h"
 #include "core/HiTuxShareVersion.h"
+
+#include "util/ByteBuffer.h"
 #include "qt/ChatInputLine.h"
 #include "qt/ChatLogView.h"
 #include "qt/DesktopNotifier.h"
@@ -113,7 +115,7 @@ MainWindow::MainWindow(QWidget* parent)
 	fSplitter(nullptr),
 	fServerAddressBox(nullptr),
 	fServerPortField(nullptr),
-	fUserNameField(nullptr),
+	fUserNameBox(nullptr),
 	fUserStatusBox(nullptr),
 	fConnectButton(nullptr),
 	fStatusLabel(nullptr),
@@ -227,9 +229,11 @@ MainWindow::_BuildUserInterface()
 	connectionLayout->addSpacing(12);
 	connectionLayout->addWidget(new QLabel(tr("Name:"), centralWidget));
 
-	fUserNameField = new QLineEdit(centralWidget);
-	fUserNameField->setMaximumWidth(160);
-	connectionLayout->addWidget(fUserNameField);
+	fUserNameBox = new QComboBox(centralWidget);
+	fUserNameBox->setEditable(true);
+	fUserNameBox->setInsertPolicy(QComboBox::NoInsert);
+	fUserNameBox->setMinimumWidth(160);
+	connectionLayout->addWidget(fUserNameBox);
 
 	connectionLayout->addWidget(new QLabel(tr("Status:"), centralWidget));
 
@@ -532,7 +536,7 @@ MainWindow::_LoadSettings()
 {
 	_PopulateServerList();
 	fServerPortField->setValue(fSettings.GetServerPort());
-	fUserNameField->setText(ToQString(fSettings.GetUserName()));
+	_PopulateNameAndStatusLists();
 
 	const QByteArray geometryData
 		= GetByteArray(fSettings.GetRawMessage(), kSettingsFieldWindowGeometry);
@@ -543,6 +547,8 @@ MainWindow::_LoadSettings()
 		= GetByteArray(fSettings.GetRawMessage(), kSettingsFieldSplitterState);
 	if (splitterData.isEmpty() == false)
 		(void) fSplitter->restoreState(splitterData);
+
+	_RestoreColumnLayouts();
 
 	bool showTimestamps = true;
 	(void) fSettings.GetRawMessage().FindBool(kSettingsFieldShowTimestamps,
@@ -566,13 +572,14 @@ MainWindow::_SaveSettings()
 {
 	fSettings.SetServerAddress(ToMuscleString(_GetSelectedServerAddress()));
 	fSettings.SetServerPort((uint16) fServerPortField->value());
-	fSettings.SetUserName(ToMuscleString(fUserNameField->text()));
+	fSettings.SetUserName(ToMuscleString(_GetUserName()));
 	fSettings.SetUserStatus(fConnection.GetLocalUserStatus());
 
 	PutByteArray(fSettings.GetRawMessage(), kSettingsFieldWindowGeometry,
 		saveGeometry());
 	PutByteArray(fSettings.GetRawMessage(), kSettingsFieldSplitterState,
 		fSplitter->saveState());
+	_SaveColumnLayouts();
 	(void) fSettings.GetRawMessage().ReplaceBool(true, kSettingsFieldShowTimestamps,
 		fShowTimestampsAction->isChecked());
 	(void) fSettings.GetRawMessage().ReplaceBool(true, kSettingsFieldShowHostColumn,
@@ -901,6 +908,7 @@ MainWindow::_OnStatusChanged()
 	// this is safe to call on every keystroke.
 	fConnection.SetLocalUserStatus(ToMuscleString(status));
 	fSettings.SetUserStatus(ToMuscleString(status));
+	fSettings.RememberStatus(ToMuscleString(status));
 }
 
 
@@ -936,6 +944,7 @@ MainWindow::_SetUserStatus(const muscle::String& status)
 {
 	fConnection.SetLocalUserStatus(status);
 	fSettings.SetUserStatus(status);
+	fSettings.RememberStatus(status);
 
 	const QSignalBlocker blocker(fUserStatusBox);
 	fUserStatusBox->setCurrentText(ToQString(status));
@@ -1068,7 +1077,7 @@ MainWindow::_ApplySettings()
 		fAliases.SetAlias(iterator.GetKey(), iterator.GetValue());
 	}
 
-	fUserNameField->setText(ToQString(fSettings.GetUserName()));
+	_PopulateNameAndStatusLists();
 
 	// Block signals so restoring the control does not look like the user
 	// changing it, which would republish and re-save on every apply.
@@ -1296,7 +1305,15 @@ MainWindow::_HandleUserInput(const QString& input)
 			}
 
 			fConnection.SetLocalUserName(command.argument);
-			fUserNameField->setText(ToQString(command.argument));
+			fSettings.SetUserName(command.argument);
+
+			// /nick is how people actually change their name, so this is where
+			// the history has to be recorded -- doing it only at connect time
+			// meant every name ever used from the chat line was forgotten.
+			fSettings.RememberUserName(command.argument);
+
+			fUserNameBox->setCurrentText(ToQString(command.argument));
+			_PopulateNameAndStatusLists();
 			_AppendLocalLine(LOG_INFORMATION_MESSAGE,
 				tr("You are now known as %1.").arg(ToQString(command.argument)));
 			break;
@@ -1535,16 +1552,101 @@ MainWindow::_ConnectToConfiguredServer()
 		return;
 	}
 
-	const QString userName = fUserNameField->text().trimmed();
+	const QString userName = _GetUserName();
 	if (userName.isEmpty()) {
 		_AppendLocalLine(LOG_ERROR_MESSAGE, tr("Enter a user name first."));
 		return;
 	}
 
 	fConnection.SetLocalUserName(ToMuscleString(userName));
+	fSettings.RememberUserName(ToMuscleString(userName));
 
 	(void) fConnection.ConnectToServer(ToMuscleString(serverAddress),
 		(uint16) fServerPortField->value());
+}
+
+
+QString
+MainWindow::_GetUserName() const
+{
+	return fUserNameBox->currentText().trimmed();
+}
+
+
+void
+MainWindow::_PopulateNameAndStatusLists()
+{
+	// Repopulating clears the edit field, so what the user has typed is put
+	// back afterwards rather than silently discarded.
+	const QString currentName = fUserNameBox->currentText();
+	fUserNameBox->clear();
+
+	const Queue<muscle::String> names = fSettings.GetRecentUserNames();
+	for (uint32 i = 0; i < names.GetNumItems(); i++)
+		fUserNameBox->addItem(ToQString(names[i]));
+
+	fUserNameBox->setCurrentText(currentName.isEmpty()
+		? ToQString(fSettings.GetUserName()) : currentName);
+
+	const QSignalBlocker blocker(fUserStatusBox);
+	const QString currentStatus = fUserStatusBox->currentText();
+	fUserStatusBox->clear();
+
+	// Remembered statuses first, then the built-in ones that are not already
+	// there -- so a status somebody actually uses is at the top of the list.
+	QStringList entries;
+	const Queue<muscle::String> statuses = fSettings.GetRecentStatuses();
+	for (uint32 i = 0; i < statuses.GetNumItems(); i++)
+		entries.append(ToQString(statuses[i]));
+
+	for (const QString& preset : {tr("here"), tr("away"), tr("busy"),
+			tr("back soon"), tr("idle")}) {
+		if (entries.contains(preset, Qt::CaseInsensitive) == false)
+			entries.append(preset);
+	}
+
+	fUserStatusBox->addItems(entries);
+	fUserStatusBox->setCurrentText(currentStatus.isEmpty()
+		? ToQString(fSettings.GetUserStatus()) : currentStatus);
+}
+
+
+void
+MainWindow::_SaveColumnLayouts()
+{
+	const QByteArray results = fResultsView->header()->saveState();
+	fSettings.SetColumnLayout("results", results.constData(),
+		(uint32) results.size());
+
+	const QByteArray users = fUserListView->header()->saveState();
+	fSettings.SetColumnLayout("users", users.constData(), (uint32) users.size());
+
+	const QByteArray transfers = fTransfersView->header()->saveState();
+	fSettings.SetColumnLayout("transfers", transfers.constData(),
+		(uint32) transfers.size());
+}
+
+
+void
+MainWindow::_RestoreColumnLayouts()
+{
+	const struct { const char* name; QTreeView* view; } views[] = {
+		{"results", fResultsView},
+		{"users", fUserListView},
+		{"transfers", fTransfersView}
+	};
+
+	for (const auto& entry : views) {
+		const ByteBufferRef stored = fSettings.GetColumnLayout(entry.name);
+		if (stored() == NULL || stored()->GetNumBytes() == 0)
+			continue;
+
+		// A layout saved by an older build may have a different column count,
+		// in which case restoreState refuses and the defaults stand.
+		(void) entry.view->header()->restoreState(
+			QByteArray(reinterpret_cast<const char*>(stored()->GetBuffer()),
+				(int) stored()->GetNumBytes()));
+	}
 }
 
 

@@ -7,6 +7,7 @@
 
 
 #include "message/Message.h"
+#include "util/ByteBuffer.h"
 #include "util/Hashtable.h"
 #include "util/Queue.h"
 #include "util/String.h"
@@ -141,6 +142,30 @@ public:
 	uint32 GetChatFontPointSize() const;
 	void SetChatFontPointSize(uint32 chatFontPointSize);
 
+	/** User names this person has used, most recent first.
+	  *
+	  * Names are how you are known on this network and people change them
+	  * often, so getting back to one you used last week should not mean
+	  * remembering how you spelled it.
+	  */
+	muscle::Queue<muscle::String> GetRecentUserNames() const;
+	void RememberUserName(const muscle::String& userName);
+
+	/** Status strings this person has used, most recent first. */
+	muscle::Queue<muscle::String> GetRecentStatuses() const;
+	void RememberStatus(const muscle::String& status);
+
+	/** Opaque per-view column layout, stored on the front-end's behalf.
+	  *
+	  * The core has no idea what a column is; it just keeps the bytes so the
+	  * widths and sort order a user set up survive a restart.
+	  *
+	  * @param viewName which view, e.g. "results"
+	  */
+	muscle::ByteBufferRef GetColumnLayout(const muscle::String& viewName) const;
+	void SetColumnLayout(const muscle::String& viewName,
+		const void* data, uint32 numBytes);
+
 	/** Whether chat is written to a file. Off by default: a chat log records
 	  * other people's words on your disk, which should be a decision.
 	  */
@@ -205,6 +230,16 @@ private:
 	muscle::String _GetString(const char* fieldName,
 		const muscle::String& defaultValue) const;
 	void _SetString(const char* fieldName, const muscle::String& value);
+
+	muscle::Queue<muscle::String> _GetStringList(const char* fieldName) const;
+	void _SetStringList(const char* fieldName,
+		const muscle::Queue<muscle::String>& values);
+
+	/** Moves (value) to the front of a stored list, trimming it to (maxItems).
+	  * Case-insensitive, because host names and user names both are.
+	  */
+	void _RememberInList(const char* fieldName, const muscle::String& value,
+		uint32 maxItems);
 
 	muscle::Message fSettings;
 };

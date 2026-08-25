@@ -43,6 +43,10 @@ const char* const kFieldMaxUploadRate = "maxuploadrate";
 const char* const kFieldFirewalled = "firewalled";
 const char* const kFieldAutoClear = "autoclear";
 const char* const kFieldChatFontPointSize = "chatfontsize";
+const char* const kFieldRecentUserNames = "usernamelist";
+const char* const kFieldRecentStatuses = "userstatuslist";
+const char* const kFieldColumnLayoutPrefix = "columns:";
+const uint32 kMaximumRememberedNames = 12;
 const char* const kFieldChatLogging = "chatlogging";
 const char* const kFieldLogDirectory = "logdir";
 const char* const kFieldIgnorePattern = "ignorepattern";
@@ -241,16 +245,60 @@ ApplicationSettings::SetServerAddress(const String& serverAddress)
 
 
 Queue<String>
+ApplicationSettings::_GetStringList(const char* fieldName) const
+{
+	Queue<String> values;
+
+	String value;
+	for (int32 i = 0; fSettings.FindString(fieldName, i, value).IsOK(); i++) {
+		if (value.HasChars())
+			(void) values.AddTail(value);
+	}
+
+	return values;
+}
+
+
+void
+ApplicationSettings::_SetStringList(const char* fieldName,
+	const Queue<String>& values)
+{
+	(void) fSettings.RemoveName(fieldName);
+
+	for (uint32 i = 0; i < values.GetNumItems(); i++)
+		(void) fSettings.AddString(fieldName, values[i]);
+}
+
+
+void
+ApplicationSettings::_RememberInList(const char* fieldName, const String& value,
+	uint32 maxItems)
+{
+	if (value.IsEmpty())
+		return;
+
+	Queue<String> values = _GetStringList(fieldName);
+
+	// Remove any existing entry first, so promoting something already known
+	// moves it rather than duplicating it.
+	for (int32 i = (int32) values.GetNumItems() - 1; i >= 0; i--) {
+		if (values[(uint32) i].EqualsIgnoreCase(value))
+			(void) values.RemoveItemAt((uint32) i);
+	}
+
+	(void) values.AddHead(value);
+
+	while (values.GetNumItems() > maxItems)
+		(void) values.RemoveTail();
+
+	_SetStringList(fieldName, values);
+}
+
+
+Queue<String>
 ApplicationSettings::GetServerList() const
 {
-	Queue<String> serverList;
-
-	String serverAddress;
-	for (int32 i = 0; fSettings.FindString(kFieldServerList, i, serverAddress).IsOK();
-			i++) {
-		if (serverAddress.HasChars())
-			(void) serverList.AddTail(serverAddress);
-	}
+	Queue<String> serverList = _GetStringList(kFieldServerList);
 
 	if (serverList.IsEmpty()) {
 		for (uint32 i = 0; i < ARRAYITEMS(kDefaultServerList); i++)
@@ -264,34 +312,67 @@ ApplicationSettings::GetServerList() const
 void
 ApplicationSettings::SetServerList(const Queue<String>& serverList)
 {
-	(void) fSettings.RemoveName(kFieldServerList);
-
-	for (uint32 i = 0; i < serverList.GetNumItems(); i++)
-		(void) fSettings.AddString(kFieldServerList, serverList[i]);
+	_SetStringList(kFieldServerList, serverList);
 }
 
 
 void
 ApplicationSettings::RememberServer(const String& serverAddress)
 {
-	if (serverAddress.IsEmpty())
-		return;
+	_RememberInList(kFieldServerList, serverAddress, kMaximumRememberedServers);
+}
 
-	Queue<String> serverList = GetServerList();
 
-	// Drop any existing entry first so promoting an already-known server moves it
-	// rather than duplicating it.  Case-insensitive, because host names are.
-	for (int32 i = (int32) serverList.GetNumItems() - 1; i >= 0; i--) {
-		if (serverList[i].EqualsIgnoreCase(serverAddress))
-			(void) serverList.RemoveItemAt((uint32) i);
-	}
+Queue<String>
+ApplicationSettings::GetRecentUserNames() const
+{
+	return _GetStringList(kFieldRecentUserNames);
+}
 
-	(void) serverList.AddHead(serverAddress);
 
-	while (serverList.GetNumItems() > kMaximumRememberedServers)
-		(void) serverList.RemoveTail();
+void
+ApplicationSettings::RememberUserName(const String& userName)
+{
+	_RememberInList(kFieldRecentUserNames, userName, kMaximumRememberedNames);
+}
 
-	SetServerList(serverList);
+
+Queue<String>
+ApplicationSettings::GetRecentStatuses() const
+{
+	return _GetStringList(kFieldRecentStatuses);
+}
+
+
+void
+ApplicationSettings::RememberStatus(const String& status)
+{
+	_RememberInList(kFieldRecentStatuses, status, kMaximumRememberedNames);
+}
+
+
+ByteBufferRef
+ApplicationSettings::GetColumnLayout(const String& viewName) const
+{
+	const String fieldName = String(kFieldColumnLayoutPrefix) + viewName;
+
+	const void* data = NULL;
+	uint32 numBytes = 0;
+	if (fSettings.FindData(fieldName, B_RAW_TYPE, &data, &numBytes).IsError())
+		return ByteBufferRef();
+
+	return GetByteBufferFromPool(numBytes, static_cast<const uint8*>(data));
+}
+
+
+void
+ApplicationSettings::SetColumnLayout(const String& viewName, const void* data,
+	uint32 numBytes)
+{
+	const String fieldName = String(kFieldColumnLayoutPrefix) + viewName;
+	(void) fSettings.RemoveName(fieldName);
+	if (data != NULL && numBytes > 0)
+		(void) fSettings.AddData(fieldName, B_RAW_TYPE, data, numBytes);
 }
 
 

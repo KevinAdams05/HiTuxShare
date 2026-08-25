@@ -129,6 +129,10 @@ private:
 	void _UpdateResultCount();
 	void _UpdateConnectionWidgets();
 	void _PopulateServerList();
+	void _PopulateNameAndStatusLists();
+	void _SaveColumnLayouts();
+	void _RestoreColumnLayouts();
+	QString _GetUserName() const;
 	QString _GetSelectedServerAddress() const;
 	void _UpdateStatusBar();
 	void _SetUserStatus(const muscle::String& status);
@@ -174,7 +178,7 @@ private:
 
 	QComboBox* fServerAddressBox;
 	QSpinBox* fServerPortField;
-	QLineEdit* fUserNameField;
+	QComboBox* fUserNameBox;
 	QComboBox* fUserStatusBox;
 	QPushButton* fConnectButton;
 
