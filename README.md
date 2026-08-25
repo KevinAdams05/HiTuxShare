@@ -8,7 +8,10 @@ A native Linux port of [HiShare](https://github.com/atomozero/HiShare) — itsel
 modernized edition of Jeremy Friesner's BeShare — speaking the same
 [MUSCLE](https://github.com/jfriesne/muscle) protocol, so it joins the same chats, user lists and file queries as the Haiku clients.
 
-![HiTuxShare in a conversation](docs/screenshots/HiTuxShare.png)
+![HiTuxShare connected to a public BeShare server](docs/screenshots/hitux-live-servers.png)
+
+<sub>Connected to <code>beshare.agmsmith.ca</code> alongside real Haiku/BeOS clients —
+#haiku on BeShare 3.04 sharing 19,591 files, and LiveInR5 on BeShare 2.28.</sub>
 
 ## Status
 
