@@ -8,16 +8,55 @@ real peer can. This file records how to do that reproducibly.
 
 ## 1. Run a private server
 
-Never iterate against the public server. `beshare.tycomsystems.com` is a real chat
-room with real people in it, and a test client that joins, renames itself six times
-and leaves is noise to them. Build MUSCLE's own `muscled` and run it on localhost:
+Never iterate against the public servers. `beshare.tycomsystems.com` and
+`beshare.agmsmith.ca` are real chat rooms with real people in them, and a test client
+that joins, renames itself six times and leaves is noise to them.
+
+### The LAN server
+
+There is a permanent `muscled` on the Linux dev box at **192.168.74.122:2960**,
+running as a systemd service (`muscled.service`) under a dedicated unprivileged
+account. It starts at boot and restarts on failure. Point any client at it:
 
 ```sh
+build/tools/probe/hitux-probe 192.168.74.122 yourname
+```
+
+It only accepts connections from the LAN and from loopback, enforced by muscled's own
+`require=` patterns rather than by a firewall. **Two spellings of the LAN are needed**:
+the listening socket is dual-stack, so an ordinary IPv4 client arrives as
+`::192.168.74.137` and never matches a bare `192.168.74.*`. With only the IPv4 form
+configured, every client is refused, and muscled logs the refusal at debug level
+only — the TCP connection is accepted and then dropped, which from the client side
+looks exactly like a server that has crashed.
+
+Useful commands on that box:
+
+```sh
+systemctl status muscled
+journalctl -u muscled -f
+sudo systemctl restart muscled
+```
+
+muscled has **no authentication of any kind**. It must never be port-forwarded. The
+session and node limits in the unit file are damage control rather than tuning: any
+client on the LAN can publish nodes without asking, and an unbounded server follows
+one straight into swap.
+
+### An ad-hoc local server
+
+For a throwaway server on your own machine, build MUSCLE's `muscled` directly:
+
+```sh
+# Either through CMake...
 cmake -S third_party/muscle -B /tmp/muscled-build -DWITH_MUSCLED=ON \
       -DWITH_TOOLS=OFF -DWITH_EXAMPLES=OFF -DWITH_TESTS=OFF
 cmake --build /tmp/muscled-build --target muscled -j"$(nproc)"
-
 /tmp/muscled-build/muscled port=12960
+
+# ...or with MUSCLE's own Makefile, which needs no cmake at all.
+make -C third_party/muscle/server -j"$(nproc)" muscled
+third_party/muscle/server/muscled port=12960
 ```
 
 `muscled` is the same server the public network runs, so behaviour observed against
