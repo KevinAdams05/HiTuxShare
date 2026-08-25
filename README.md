@@ -15,14 +15,15 @@ modernized edition of Jeremy Friesner's BeShare — speaking the same
 
 ## Status
 
-**Phase 1 (chat) is working.** Verified against both a private local `muscled` and
-the live public server, where it correctly reads BeShare 3.04 and JavaShare peers.
+**Phases 1 and 2 are working** — chat, live file search, and peer-to-peer
+downloads. Verified against both a private local `muscled` and the live public
+network, including real files pulled from a Haiku peer running BeShare 3.04.
 
 | Phase | State |
 |---|---|
 | 0 — Protocol proof (`hitux-probe`) | **Done** |
 | 1 — Chat | **Working**; private-message tabs and `/ignore` still to come |
-| 2 — Downloading | Not started |
+| 2 — Downloading | **Working**; resume and connect-back still to come |
 | 3 — Sharing | Not started |
 | 4 — Polish, i18n, packaging | Not started |
 
@@ -31,6 +32,18 @@ list with status / client / file-count columns, public chat, `/me` actions, priv
 messages, ping with round-trip timing, nickname changes, input history, nickname
 tab-completion, timestamps, light and dark themes, and persistent settings including
 window and splitter geometry.
+
+**File search** is a live subscription rather than a snapshot: matches keep arriving
+as other people share things, with nothing to refresh. **Downloads** go peer to peer
+and never through the server; selecting several files from one person uses a single
+connection rather than several, chunk checksums are verified, and names that peers
+choose are sanitised before they go anywhere near the filesystem.
+
+![Downloading from a Haiku peer](docs/screenshots/hitux-download.png)
+
+Not yet implemented, and not pretended otherwise: resuming an interrupted download,
+downloading from a firewalled peer (that needs connect-back), byte-range requests,
+and bandwidth limiting.
 
 ## Build
 
