@@ -33,6 +33,8 @@ const char* const kFieldServerAddress = "server";
 const char* const kFieldServerPort = "serverport";
 const char* const kFieldInstallId = "installid";
 const char* const kFieldConnectOnStartup = "connectonstartup";
+const char* const kFieldDownloadDirectory = "downloaddir";
+const char* const kFieldRetainFilePaths = "retainfilepaths";
 
 // Named to match HiShare's own settings key, so the two files stay legible to
 // anyone reading both.
@@ -284,6 +286,36 @@ void
 ApplicationSettings::SetServerPort(uint16 serverPort)
 {
 	(void) fSettings.ReplaceInt32(true, kFieldServerPort, (int32) serverPort);
+}
+
+
+String
+ApplicationSettings::GetDownloadDirectory() const
+{
+	return _GetString(kFieldDownloadDirectory, GetDefaultDownloadDirectoryPath());
+}
+
+
+void
+ApplicationSettings::SetDownloadDirectory(const String& downloadDirectory)
+{
+	_SetString(kFieldDownloadDirectory, downloadDirectory);
+}
+
+
+bool
+ApplicationSettings::GetRetainFilePaths() const
+{
+	bool retainFilePaths = false;
+	(void) fSettings.FindBool(kFieldRetainFilePaths, retainFilePaths);
+	return retainFilePaths;
+}
+
+
+void
+ApplicationSettings::SetRetainFilePaths(bool retainFilePaths)
+{
+	(void) fSettings.ReplaceBool(true, kFieldRetainFilePaths, retainFilePaths);
 }
 
 

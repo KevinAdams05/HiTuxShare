@@ -72,6 +72,26 @@ public:
 	uint16 GetServerPort() const;
 	void SetServerPort(uint16 serverPort);
 
+	/** Where completed downloads are written.
+	  *
+	  * Defaults to ~/Downloads/HiTuxShare rather than the bare Downloads folder:
+	  * files arrive here named by strangers, and keeping them in their own place
+	  * makes that visible.
+	  */
+	muscle::String GetDownloadDirectory() const;
+	void SetDownloadDirectory(const muscle::String& downloadDirectory);
+
+	/** Whether a download recreates the sharer's directory structure.
+	  *
+	  * Off by default. A peer's path can be a dozen levels deep -- the first
+	  * real download during development landed under
+	  * "BeShare Mirrors/H-kon/Genki CD/beos/etc/install/..." -- and burying a
+	  * file the user asked for is a worse default than putting it where they
+	  * can see it. BeShare has the same switch.
+	  */
+	bool GetRetainFilePaths() const;
+	void SetRetainFilePaths(bool retainFilePaths);
+
 	bool GetConnectOnStartup() const;
 	void SetConnectOnStartup(bool connectOnStartup);
 

@@ -7,6 +7,7 @@
 add_library(hitux-core STATIC
     ApplicationSettings.cpp
     ChatCommandParser.cpp
+    FileDownload.cpp
     FormatUtilities.cpp
     ServerConnection.cpp
     UserRegistry.cpp
@@ -20,4 +21,7 @@ target_include_directories(hitux-core
 
 target_link_libraries(hitux-core PUBLIC muscle)
 
-target_compile_options(hitux-core PRIVATE -Wall -Wextra)
+# -Wno-multichar: the transfer message types are four-character constants
+# ('tshr' and friends) because that is what BeShare put on the wire. The warning
+# is right in general and wrong here.
+target_compile_options(hitux-core PRIVATE -Wall -Wextra -Wno-multichar)

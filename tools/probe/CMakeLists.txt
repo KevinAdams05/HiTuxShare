@@ -9,4 +9,4 @@ add_executable(hitux-probe main.cpp)
 
 target_link_libraries(hitux-probe PRIVATE hitux-core)
 
-target_compile_options(hitux-probe PRIVATE -Wall -Wextra)
+target_compile_options(hitux-probe PRIVATE -Wall -Wextra -Wno-multichar)

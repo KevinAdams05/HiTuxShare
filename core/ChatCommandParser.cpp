@@ -37,6 +37,7 @@ const CommandTableEntry kCommandTable[] = {
 	{ "start",      CHAT_COMMAND_START_QUERY, false },
 	{ "query",      CHAT_COMMAND_START_QUERY, false },
 	{ "stop",       CHAT_COMMAND_STOP_QUERY, false },
+	{ "get",        CHAT_COMMAND_GET,        false },
 	{ "disconnect", CHAT_COMMAND_DISCONNECT, false },
 	{ "clear",      CHAT_COMMAND_CLEAR,      false },
 	{ "help",       CHAT_COMMAND_HELP,       false },
@@ -143,6 +144,7 @@ ChatCommandParser::GetHelpEntries()
 		{ "quit",       NULL,            "Quit HiTuxShare" },
 		{ "start",      "<pattern>",     "Search shared files, e.g. /start *.hpkg" },
 		{ "stop",       NULL,            "Stop the running search" },
+		{ "get",        "<number>",      "Download a numbered search result" },
 		{ "status",     "<status>",      "Set your status string" }
 	};
 

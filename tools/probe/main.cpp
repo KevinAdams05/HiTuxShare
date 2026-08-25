@@ -5,6 +5,7 @@
 
 #include "core/ApplicationSettings.h"
 #include "core/ChatCommandParser.h"
+#include "core/FileDownload.h"
 #include "core/FormatUtilities.h"
 #include "core/HiTuxShareVersion.h"
 #include "core/ServerConnection.h"
@@ -30,13 +31,15 @@ namespace {
   * There is deliberately no formatting cleverness here: the point of the probe is to
   * show what actually arrived, so that the GUI can be compared against it.
   */
-class ProbeListener : public ServerConnectionListener
+class ProbeListener : public ServerConnectionListener,
+	public FileDownloadListener
 {
 public:
 	ProbeListener()
 		:
 		fUsers(NULL),
 		fResultCount(0),
+		fLastProgressTenths(-1),
 		fShouldQuit(false)
 	{
 	}
@@ -111,7 +114,10 @@ public:
 
 	virtual void QueryResultAdded(const FileResult& result)
 	{
-		printf("  %-40s %10s  %s%s\n", result.fileName(),
+		(void) fResults.AddTail(result);
+
+		printf("  [%2u] %-36s %10s  %s%s\n",
+			(unsigned) fResults.GetNumItems() - 1, result.fileName(),
 			FormatByteSize(result.fileSize)(),
 			fUsers != NULL
 				? fUsers->GetDisplayNameForSession(result.sessionId)()
@@ -132,6 +138,75 @@ public:
 	virtual void QueryResultsCleared()
 	{
 		fResultCount = 0;
+		fResults.Clear();
+	}
+
+	const Queue<FileResult>& GetResults() const { return fResults; }
+
+	// FileDownloadListener
+	virtual void DownloadStateChanged(FileDownload* download)
+	{
+		switch (download->GetState()) {
+			case DOWNLOAD_CONNECTING:
+				printf("*** Connecting to peer...\n");
+				break;
+
+			case DOWNLOAD_REQUESTING:
+				printf("*** Connected; asking for the file...\n");
+				break;
+
+			case DOWNLOAD_QUEUED_REMOTELY:
+				printf("*** The peer has put us on their waiting list.\n");
+				break;
+
+			case DOWNLOAD_TRANSFERRING:
+				printf("*** Receiving %s (%s)...\n",
+					download->GetCurrentFileName()(),
+					FormatByteSize(download->GetCurrentFileSize())());
+				break;
+
+			case DOWNLOAD_FINISHED:
+				printf("*** Download finished: %u file(s), %s.\n",
+					(unsigned) download->GetCompletedFileCount(),
+					FormatByteSize(download->GetTotalBytesDone())());
+				break;
+
+			case DOWNLOAD_FAILED:
+				printf("*** Download failed: %s\n", download->GetErrorText()());
+				break;
+
+			default:
+				break;
+		}
+
+		fflush(stdout);
+	}
+
+	virtual void DownloadProgress(FileDownload* download)
+	{
+		// One line per 10%, so a big file does not scroll the terminal away.
+		const int64 size = download->GetCurrentFileSize();
+		if (size <= 0)
+			return;
+
+		const int tenths = (int) ((download->GetCurrentFileBytesDone() * 10) / size);
+		if (tenths == fLastProgressTenths)
+			return;
+
+		fLastProgressTenths = tenths;
+		printf("      %3d%%  %s  %s\n", tenths * 10,
+			FormatByteSize(download->GetCurrentFileBytesDone())(),
+			FormatTransferRate(download->GetBytesPerSecond())());
+		fflush(stdout);
+	}
+
+	virtual void DownloadFileCompleted(FileDownload* download,
+		const String& localPath)
+	{
+		(void) download;
+		fLastProgressTenths = -1;
+		printf("*** Saved to %s\n", localPath());
+		fflush(stdout);
 	}
 
 	virtual void QuerySweepStateChanged(bool isSweeping)
@@ -155,7 +230,9 @@ public:
 
 private:
 	const UserRegistry* fUsers;
+	Queue<FileResult> fResults;
 	uint32 fResultCount;
+	int fLastProgressTenths;
 	bool fShouldQuit;
 };
 
@@ -186,7 +263,9 @@ PrintHelp()
   */
 void
 HandleUserInput(const String& line, ServerConnection& connection,
-	ProbeListener& listener)
+	ProbeListener& listener, ICallbackMechanism& callbackMechanism,
+	const String& downloadDirectory, bool retainFilePaths,
+	Queue<FileDownload*>& downloads)
 {
 	const ChatCommand command = ChatCommandParser::Parse(line);
 
@@ -290,6 +369,52 @@ HandleUserInput(const String& line, ServerConnection& connection,
 			printf("*** Search stopped.\n");
 			break;
 
+		case CHAT_COMMAND_GET:
+		{
+			const Queue<FileResult>& results = listener.GetResults();
+			const uint32 index = (uint32) atoi(command.argument());
+			if (command.argument.IsEmpty() || index >= results.GetNumItems()) {
+				printf("*** Usage: /get <number from the search results>\n");
+				break;
+			}
+
+			const FileResult& chosen = results[index];
+			const UserRecord* sharer
+				= connection.GetUsers().FindUser(chosen.sessionId);
+			if (sharer == NULL) {
+				printf("*** That user is no longer here.\n");
+				break;
+			}
+
+			if (chosen.isFirewalled || sharer->port <= 0) {
+				printf("*** %s is firewalled; connect-back is not implemented"
+					" yet.\n", sharer->GetDisplayName()());
+				break;
+			}
+
+			// One download object per session; it deletes itself once the
+			// caller is done with it, which for the probe is at exit.
+			FileDownload* download = new FileDownload(&callbackMechanism,
+				downloadDirectory);
+			download->SetListener(&listener);
+			download->SetRetainFilePaths(retainFilePaths);
+			download->AddRequestedFile(chosen.fileName, chosen.path,
+				chosen.fileSize);
+
+			printf("*** Asking %s at %s:%d for %s\n",
+				sharer->GetDisplayName()(), sharer->hostName(),
+				(int) sharer->port, chosen.fileName());
+
+			if (download->Start(sharer->hostName, (uint16) sharer->port,
+					chosen.sessionId, connection.GetLocalSessionId(),
+					connection.GetLocalUserName()).IsError()) {
+				printf("*** Could not start the download.\n");
+			}
+
+			(void) downloads.AddTail(download);
+			break;
+		}
+
 		case CHAT_COMMAND_DISCONNECT:
 			connection.DisconnectFromServer();
 			break;
@@ -361,7 +486,12 @@ main(int argc, char** argv)
 	printf("Type /help for commands, /quit to exit.\n");
 	fflush(stdout);
 
+	const String downloadDirectory = settings.GetDownloadDirectory();
+	const bool retainFilePaths = settings.GetRetainFilePaths();
+	printf("Downloads go to %s\n", downloadDirectory());
+
 	SocketCallbackMechanism callbackMechanism;
+	Queue<FileDownload*> downloads;
 
 	ProbeListener listener;
 	ServerConnection connection(&callbackMechanism);
@@ -411,7 +541,8 @@ main(int argc, char** argv)
 				for (int32 i = 0;
 						inputMessage()->FindString(PR_NAME_TEXT_LINE, i, &line).IsOK();
 						i++) {
-					HandleUserInput(*line, connection, listener);
+					HandleUserInput(*line, connection, listener, callbackMechanism,
+						downloadDirectory, retainFilePaths, downloads);
 				}
 			}
 		}
@@ -420,6 +551,10 @@ main(int argc, char** argv)
 	}
 
 	connection.DisconnectFromServer();
+
+	for (uint32 i = 0; i < downloads.GetNumItems(); i++)
+		delete downloads[i];
+
 	printf("*** Goodbye.\n");
 	return 0;
 }

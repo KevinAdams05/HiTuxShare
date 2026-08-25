@@ -207,9 +207,9 @@ ServerConnection::StartQuery(const String& sessionExpression,
 	}
 
 	fQueryActive = true;
-	fSessionMatcher.SetPattern(sessionExpression.HasChars()
+	(void) fSessionMatcher.SetPattern(sessionExpression.HasChars()
 		? sessionExpression : String("*"));
-	fFileNameMatcher.SetPattern(fileExpression.HasChars()
+	(void) fFileNameMatcher.SetPattern(fileExpression.HasChars()
 		? fileExpression : String("*"));
 
 	if (fListener != NULL)

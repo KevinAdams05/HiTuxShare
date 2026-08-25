@@ -108,10 +108,56 @@ enum
 
 // Field names inside a shared-file node.  The space and capitalisation are part
 // of the wire format, not a style choice -- they date to BeOS attribute names.
+#define BESHARE_FIELD_FILE_NAME           "beshare:File Name"
 #define BESHARE_FIELD_FILE_SIZE           "beshare:File Size"
 #define BESHARE_FIELD_MODIFICATION_TIME   "beshare:Modification Time"
 #define BESHARE_FIELD_PATH                "beshare:Path"
 #define BESHARE_FIELD_KIND                "beshare:Kind"
+
+// Peer-to-peer transfer message types.  Based at 'tshr' and ordered exactly as
+// BeShare declares them -- the numbering is the wire contract, so nothing may be
+// inserted into the middle of this list.
+enum
+{
+	TRANSFER_COMMAND_CONNECTED_TO_PEER = 'tshr',
+	TRANSFER_COMMAND_DISCONNECTED_FROM_PEER,
+	TRANSFER_COMMAND_FILE_LIST,
+	TRANSFER_COMMAND_FILE_HEADER,
+	TRANSFER_COMMAND_FILE_DATA,
+	TRANSFER_COMMAND_DEPRECATED,
+	TRANSFER_COMMAND_NOTIFY_QUEUED,
+	TRANSFER_COMMAND_MD5_SEND_READ_DONE,
+	TRANSFER_COMMAND_MD5_RECV_READ_DONE,
+	TRANSFER_COMMAND_PEER_ID,
+	TRANSFER_COMMAND_REJECTED
+};
+
+
+// How file data may be disguised in transit, to get past middleboxes that filter
+// on content. The requester states a preference; the sender stamps each chunk
+// with what it actually did.
+enum
+{
+	MUNGE_MODE_NONE = 0,
+	MUNGE_MODE_XOR,
+
+	NUM_MUNGE_MODES
+};
+
+
+// Fields in a transfer session's messages.
+#define BESHARE_FIELD_FROM_SESSION        "beshare:FromSession"
+#define BESHARE_FIELD_FROM_USER_NAME      "beshare:FromUserName"
+#define BESHARE_FIELD_FILE_LIST_NAMES     "files"
+#define BESHARE_FIELD_FILE_LIST_OFFSETS   "offsets"
+#define BESHARE_FIELD_FILE_LIST_MD5       "md5"
+#define BESHARE_FIELD_MUNGE_MODE          "mm"
+#define BESHARE_FIELD_CHECKSUM            "chk"
+#define BESHARE_FIELD_DATA                "data"
+#define BESHARE_FIELD_START_OFFSET        "beshare:StartOffset"
+#define BESHARE_FIELD_SEND_LENGTH         "beshare:SendLength"
+#define BESHARE_FIELD_TIME_LEFT           "timeleft"
+
 
 // Prefix marking a field that carries data but should not become a display
 // column, e.g. "besharez:Vector Icon".

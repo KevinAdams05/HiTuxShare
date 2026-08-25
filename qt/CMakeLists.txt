@@ -24,7 +24,7 @@ target_link_libraries(hitux
         Qt6::Widgets
 )
 
-target_compile_options(hitux PRIVATE -Wall -Wextra)
+target_compile_options(hitux PRIVATE -Wall -Wextra -Wno-multichar)
 
 install(TARGETS hitux RUNTIME DESTINATION bin)
 
