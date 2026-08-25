@@ -53,3 +53,52 @@ style looks as foreign as the reverse.
 - **Comments say why, not what.** A comment that restates the code is worse than none;
   a comment recording a measurement, a protocol constraint or a rejected alternative
   is worth more than the code it sits above.
+
+## The linter
+
+`scripts/style-check.py` mechanically enforces the parts of this document a
+script can. It is a **checker, never a reformatter** — auto-fixing style in a
+tree that vendors upstream code creates exactly the unreviewable churn we are
+trying to avoid.
+
+```sh
+python3 scripts/style-check.py                 # everything tracked
+python3 scripts/style-check.py --changed       # only what differs from HEAD
+python3 scripts/style-check.py --changed=REF   # ... or from any ref
+python3 scripts/style-check.py --list-rules
+python3 scripts/style-check.py --self-test
+```
+
+Exit status is 0 when clean, so it gates a commit or a release directly. Run
+`--changed` between commits; run the full sweep before a release.
+
+**There is deliberately no baseline file.** This is a greenfield repo, so a
+clean run means clean and the gate requires zero findings rather than zero *new*
+ones. The moment a baseline appears, the real standard silently becomes
+"whatever was already there".
+
+**`--self-test` is not optional ceremony.** A regex anchored slightly wrong
+matches nothing and reports a clean tree, which is indistinguishable from
+correct code. Every rule must have a fixture in `tests/style/` that proves it
+can fire, and the good fixtures prove it does not fire on compliant code — the
+self-test fails if any rule lacks one. It earned this on its first run by
+catching `tab-indent` firing on every Doxygen continuation line.
+
+The formatting rules are the cheap half. The ones worth the run are the four
+that encode decisions from this document:
+
+| Rule | What it protects |
+|---|---|
+| `core-qt-include` | The invariant the whole core/front-end split rests on |
+| `protocol-literal` | Wire strings must come from `BeShareProtocol.h` — a typo'd node path fails silently against real peers and no local test would catch it |
+| `html-unescaped` | Peer text reaching the rich-text log without escaping |
+| `core-nullptr` | `NULL` in core (MUSCLE's API), `nullptr` in Qt |
+
+### A finding is a claim about the code, not about the rule
+
+The first full run produced 19 findings, and **all 19 were false positives** —
+rules matching prose inside comments ("long-running", a `"beshare/name"` node
+quoted in a doc comment) and a guess about where `BeShareProtocol.h` splits into
+words. The fix was to the linter, not the code. If a rule fires on something
+correct, fix the rule and add a fixture, because a checker people learn to
+ignore is worse than no checker at all.
